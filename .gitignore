@@ -1,0 +1,65 @@
+####################################
+# OS / Editor files
+####################################
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
+
+####################################
+# Environment files
+####################################
+.env
+.env.*
+!.env.example
+
+####################################
+# Node.js
+####################################
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+####################################
+# Backend
+####################################
+
+# Ignore database data only
+backend/data/
+
+# Ignore backend dependencies
+backend/node_modules/
+
+# Optional (if generated)
+backend/dist/
+backend/build/
+
+####################################
+# Frontend
+####################################
+
+# Ignore frontend dependencies
+frontend/node_modules/
+
+# Optional build output
+frontend/dist/
+frontend/build/
+
+####################################
+# Electron (if applicable)
+####################################
+frontend/.electron/
+
+####################################
+# Docker
+####################################
+*.pid
+
+####################################
+# Temporary files
+####################################
+*.tmp
+*.swp
+.cache/
