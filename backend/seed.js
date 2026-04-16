@@ -8,7 +8,7 @@ if (process.env.NODE_ENV !== 'seed') {
   process.exit(1);
 }
 
-const { initDB } = require('./db');
+const { initDB } = require('./db.sqlite');
 
 const db = initDB();
 
