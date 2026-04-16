@@ -3,7 +3,7 @@ import './App.css';
 import companyLogo from './assets/footer logo.jpg';
 
 
-const API = 'https://cc-manager-phi.vercel.app/';
+const API = 'https://cc-manager-8sgi.onrender.com/api';
 
 // ─── Demo credentials (replace with real auth backend) ───────
 const DEMO_USER = { username: 'Admin Catapult', password: 'cat@2026', name: 'Saraswathy', role: 'HR Manager' };
