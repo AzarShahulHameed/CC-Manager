@@ -1,62 +1,43 @@
 require('dotenv').config();
-
 const express = require('express');
 const cors = require('cors');
 const cron = require('node-cron');
 
 const app = express();
-console.log('🔥 CORRECT BACKEND server.js LOADED');
 
-// DB
-const pool = require('./db');
-
-// Route imports
-const cardRoutes = require('./routes/cards');
-const transactionRoutes = require('./routes/transactions');
-const notificationRoutes = require('./routes/notifications');
-const analyticsRoutes = require('./routes/analytics');
-const { runDailyNotificationCheck } = require('./services/notificationService');
-
-const PORT = process.env.PORT || 3001;
-
-// Middleware
+// --- middleware ---
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
-/* ================= ROOT ================= */
+// --- root ---
 app.get('/', (req, res) => {
   res.send('CC Manager Backend is running');
 });
 
-/* ================= API ROUTES ================= */
-console.log('✅ REGISTERING ROUTES...');
+// --- api routes ---
+const cardRoutes = require('./routes/cards');
+const transactionRoutes = require('./routes/transactions');
+const notificationRoutes = require('./routes/notifications');
+const analyticsRoutes = require('./routes/analytics');
+
 app.use('/api/cards', cardRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/analytics', analyticsRoutes);
 
-/* ================= SINGLE ROUTES ================= */
+// --- health ---
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ status: 'ok' });
 });
 
-app.get('/api/dashboard', async (req, res) => {
-  const result = await pool.query('SELECT * FROM credit_cards');
-  res.json(result.rows);
-});
-
-/* ================= CRON ================= */
-cron.schedule('0 9 * * *', () => {
-  runDailyNotificationCheck(pool);
-});
-
-/* ================= 404 — ABSOLUTE LAST ================= */
+// --- last: 404 ONLY ---
 app.use((req, res) => {
-  console.log('❗ Unmatched path reached Express:', req.method, req.path);
-  res.status(404).json({ error: 'Route not found', path: req.path });
+  console.log('❗ 404 HIT:', req.method, req.path);
+  res.status(404).json({ error: 'Route not found' });
 });
 
-/* ================= LISTEN ================= */
+// --- listen LAST ---
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.log(`✅ CC Manager API running on port ${PORT}`);
+  console.log(`✅ Server running on ${PORT}`);
 });
