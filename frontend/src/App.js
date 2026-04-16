@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './App.css';
 import companyLogo from './assets/footer logo.jpg';
 
-
 const API = 'https://cc-manager-8sgi.onrender.com/api';
 
 // ─── Demo credentials (replace with real auth backend) ───────
@@ -43,7 +42,7 @@ function getBankColor(n) {
 const CHART_COLORS=['#4361ee','#f59e0b','#10b981','#7048e8','#f43f5e','#0ea5e9'];
 
 // ─── Login Page ───────────────────────────────────────────────
-function LoginPage({ onLogin, logo }) {
+function LoginPage({ onLogin }) {
   const [form, setForm] = useState({ username:'', password:'' });
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState('');
@@ -218,7 +217,7 @@ function InlineBalance({ card, onUpdated }) {
   const ref=useRef();
   const save=async()=>{
     try {
-      await fetch(`${API}/cards/${card.id}/balance`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({outstanding_balance:parseFloat(val)||0})});
+      await fetch(`${API}/cards/${card.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({outstanding_balance:parseFloat(val)||0})});
       setEditing(false); onUpdated();
     } catch{setEditing(false);}
   };
@@ -326,9 +325,6 @@ function TransactionModal({ cards, onClose, onSave }) {
         <div className="modal-header"><h2>💳 Add Transaction</h2><button className="close-btn" onClick={onClose}>✕</button></div>
         <form onSubmit={handleSubmit} className="card-form">
           <div style={{display:'flex',flexDirection:'column',gap:'16px',marginBottom:'22px'}}>
-            {[
-              {label:'Card',type:'select',options:cards.map(c=>({v:c.id,l:`${c.bank_name} — ****${c.card_number.slice(-4)}`})),key:'card_id'},
-            ].map(()=>null)}
             <div className="form-group"><label>Card</label>
               <select value={form.card_id} onChange={e=>setForm(f=>({...f,card_id:e.target.value}))} required>
                 <option value="">Select Card</option>
@@ -476,7 +472,6 @@ function exportStatement(card, transactions) {
 // ─── Main App ─────────────────────────────────────────────────
 export default function App() {
   const [user, setUser] = useState(null);
-  const [logo, setLogo] = useState(localStorage.getItem('cc_logo')||null);
   const [dashboard,setDashboard]=useState(null);
   const [transactions,setTransactions]=useState([]);
   const [notifications,setNotifications]=useState([]);
@@ -490,31 +485,27 @@ export default function App() {
   const [loading,setLoading]=useState(true);
   const [txnFilter,setTxnFilter]=useState('all');
   const [toastMsg,setToastMsg]=useState('');
-  const logoInput=useRef();
 
   const toast=msg=>{setToastMsg(msg);setTimeout(()=>setToastMsg(''),3000);};
 
-  const handleLogoUpload=e=>{
-    const file=e.target.files[0]; if(!file) return;
-    const reader=new FileReader();
-    reader.onload=ev=>{const d=ev.target.result;setLogo(d);localStorage.setItem('cc_logo',d);toast('✅ Logo updated!');};
-    reader.readAsDataURL(file);
-  };
-
   const loadDashboard=useCallback(async()=>{
     try{
-      const [dash,txns,notifs,anal]=await Promise.all([
-        fetch(`${API}/dashboard`).then(r=>r.json()),
-        fetch(`${API}/transactions?limit=50`).then(r=>r.json()),
-        fetch(`${API}/notifications`).then(r=>r.json()),
-        fetch(`${API}/analytics/spending`).then(r=>r.json()).catch(()=>null),
+      const [dash, txns, notifs, anal] = await Promise.all([
+        fetch(`${API}/dashboard`).then(r => r.ok ? r.json() : Promise.reject('Dashboard failed')),
+        fetch(`${API}/transactions?limit=50`).then(r => r.ok ? r.json() : []),
+        fetch(`${API}/notifications`).then(r => r.ok ? r.json() : []),
+        fetch(`${API}/analytics/spending`).then(r => r.ok ? r.json() : null).catch(() => null),
       ]);
       setDashboard(dash);
       setTransactions(Array.isArray(txns)?txns:[]);
       setNotifications(Array.isArray(notifs)?notifs:[]);
       setAnalytics(anal);
-    }catch(err){console.error(err);}
-    finally{setLoading(false);}
+    } catch(err){
+      console.error('Failed to load dashboard:', err);
+      toast('Failed to load data. Please refresh.');
+    } finally{
+      setLoading(false);
+    }
   },[]);
 
   useEffect(()=>{ if(user) loadDashboard(); },[user,loadDashboard]);
@@ -531,7 +522,7 @@ export default function App() {
   };
 
   // Show login if not authenticated
-  if (!user) return <LoginPage onLogin={setUser} logo={logo} />;
+  if (!user) return <LoginPage onLogin={setUser} />;
 
   if (loading) return(
     <div className="loading-screen">
@@ -551,19 +542,11 @@ export default function App() {
       <aside className="sidebar">
         <div className="sidebar-top">
           <div className="sidebar-logo">
-            
-         <div className="login-brand">
-          <div className="login-logo-wrap">
-            <img
-              src={companyLogo}
-              alt="Company Logo"
-              className="company-logo"
-            />
-          </div>
-              <div className="logo-title">CC Manager</div>
-              <div className="logo-sub">HR Manager Dashboard</div>
+            <div className="login-logo-wrap">
+              <img src={companyLogo} alt="Company Logo" className="company-logo" />
             </div>
-            <input ref={logoInput} type="file" accept="image/*" style={{display:'none'}} onChange={handleLogoUpload}/>
+            <div className="logo-title">CC Manager</div>
+            <div className="logo-sub">HR Manager Dashboard</div>
           </div>
         </div>
 
