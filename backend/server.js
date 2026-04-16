@@ -25,10 +25,10 @@ app.use(cors({ origin: '*' }));
 app.use(express.json());
 
 // Routes
-app.use('/api/cards', cardRoutes);
-app.use('/api/transactions', transactionRoutes);
-app.use('/api/notifications', notificationRoutes);
-app.use('/api/analytics', analyticsRoutes);
+// app.use('/api/cards', cardRoutes);
+// app.use('/api/transactions', transactionRoutes);
+// app.use('/api/notifications', notificationRoutes);
+// app.use('/api/analytics', analyticsRoutes);
 
 // ✅ Health check
 app.get('/api/health', (req, res) => {
