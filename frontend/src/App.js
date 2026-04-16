@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './App.css';
-import companyLogo from './assets/footer logo.jpg';
 
-const API = 'https://cc-manager-8sgi.onrender.com/api';
+const API = 'http://localhost:3001/api';
 
 // ─── Demo credentials (replace with real auth backend) ───────
-const DEMO_USER = { username: 'Admin Catapult', password: 'cat@2026', name: 'Saraswathy', role: 'HR Manager' };
+const DEMO_USER = { username: 'admin', password: 'ceo2024', name: 'CEO', role: 'Executive' };
 
 // ─── Utilities ───────────────────────────────────────────────
 function maskCard(num) {
@@ -31,8 +30,8 @@ function urgencyColor(days) {
 }
 const BANK_COLORS = {
   'emirates nbd':'#c8a94a','adcb':'#0052A5','fab':'#1a5c38',
-  'mashreq':'#c0392b','du titanium':'#aa0000','ei':'#005f8a',
-  'citibank':'#003B8E','rak bank':'#6b0f0f','ei flex':'#00573F',
+  'mashreq':'#c0392b','hsbc':'#aa0000','standard chartered':'#005f8a',
+  'citibank':'#003B8E','rak bank':'#6b0f0f','dib':'#00573F',
 };
 function getBankColor(n) {
   const l=(n||'').toLowerCase();
@@ -42,7 +41,7 @@ function getBankColor(n) {
 const CHART_COLORS=['#4361ee','#f59e0b','#10b981','#7048e8','#f43f5e','#0ea5e9'];
 
 // ─── Login Page ───────────────────────────────────────────────
-function LoginPage({ onLogin }) {
+function LoginPage({ onLogin, logo }) {
   const [form, setForm] = useState({ username:'', password:'' });
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState('');
@@ -55,7 +54,7 @@ function LoginPage({ onLogin }) {
     if (form.username === DEMO_USER.username && form.password === DEMO_USER.password) {
       onLogin(DEMO_USER);
     } else {
-      setError('Invalid username or password');
+      setError('Invalid username or password. Try admin / ceo2024');
     }
     setLoading(false);
   };
@@ -68,17 +67,12 @@ function LoginPage({ onLogin }) {
         <div className="login-left-circles">
           <span/><span/><span/>
         </div>
-       
         <div className="login-brand">
           <div className="login-logo-wrap">
-            <img
-              src={companyLogo}
-              alt="Company Logo"
-              className="company-logo"
-            />
+            {logo ? <img src={logo} alt="logo" style={{width:'100%',height:'100%',objectFit:'cover',borderRadius:'18px'}} /> : '◈'}
           </div>
           <div className="login-brand-name">CC Manager</div>
-          <div className="login-brand-sub">Credit Card Management Dashboard</div>
+          <div className="login-brand-sub">Executive Credit Card Dashboard</div>
         </div>
         <div className="login-features">
           {[
@@ -121,6 +115,7 @@ function LoginPage({ onLogin }) {
               {loading ? '⏳ Signing in...' : '→ Sign In'}
             </button>
           </form>
+          <div className="login-hint">Demo: admin / ceo2024</div>
         </div>
       </div>
     </div>
@@ -217,7 +212,7 @@ function InlineBalance({ card, onUpdated }) {
   const ref=useRef();
   const save=async()=>{
     try {
-      await fetch(`${API}/cards/${card.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({outstanding_balance:parseFloat(val)||0})});
+      await fetch(`${API}/cards/${card.id}/balance`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({outstanding_balance:parseFloat(val)||0})});
       setEditing(false); onUpdated();
     } catch{setEditing(false);}
   };
@@ -250,7 +245,7 @@ function CardModal({ card, onClose, onSave }) {
       onSave();
     }catch(err){alert('Error: '+err.message);}finally{setSaving(false);}
   };
-  const banks=['Emirates NBD','ADCB','FAB','Mashreq','DU Titanium','Emirates Islamic','Citibank','RAK Bank','Emirates Islamic - Flex','Other'];
+  const banks=['Emirates NBD','ADCB','FAB','Mashreq','HSBC','Standard Chartered','Citibank','RAK Bank','DIB','Other'];
   return(
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e=>e.stopPropagation()}>
@@ -325,6 +320,9 @@ function TransactionModal({ cards, onClose, onSave }) {
         <div className="modal-header"><h2>💳 Add Transaction</h2><button className="close-btn" onClick={onClose}>✕</button></div>
         <form onSubmit={handleSubmit} className="card-form">
           <div style={{display:'flex',flexDirection:'column',gap:'16px',marginBottom:'22px'}}>
+            {[
+              {label:'Card',type:'select',options:cards.map(c=>({v:c.id,l:`${c.bank_name} — ****${c.card_number.slice(-4)}`})),key:'card_id'},
+            ].map(()=>null)}
             <div className="form-group"><label>Card</label>
               <select value={form.card_id} onChange={e=>setForm(f=>({...f,card_id:e.target.value}))} required>
                 <option value="">Select Card</option>
@@ -415,39 +413,55 @@ function RecommendModal({ onClose }) {
 
         {results && (
           <div className="recommend-results">
-            {results.recommendations.map((card, i) => (
-              <div key={card.id} className={`recommend-card ${i===0&&card.canAfford?'best':''} ${!card.canAfford?'disabled':''}`}>
-                <div className="rec-rank">{i===0&&card.canAfford?'⭐':`#${i+1}`}</div>
-                <div className="rec-card-strip" style={{background:card.color||getBankColor(card.bank_name)}}/>
-                <div className="rec-info">
-                  <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'4px'}}>
-                    <div className="rec-name">{card.bank_name} <span className="rec-num">****{card.card_number.slice(-4)}</span></div>
-                    {i===0&&card.canAfford && <span className="advisor-tag best-tag">BEST CHOICE</span>}
-                    {!card.canAfford && <span className="advisor-tag" style={{background:'#fee2e2',color:'#ef4444'}}>INSUFFICIENT LIMIT</span>}
-                    {card.daysToBilling<=2&&card.canAfford && <span className="advisor-tag" style={{background:'#fef3c7',color:'#b45309'}}>⚠️ BILLING CLOSES SOON</span>}
-                  </div>
-                  <div className="rec-recommendation">{card.recommendation}</div>
-                  <div className="rec-stats">
-                    {[
-                      {label:'Available',val:fmtCurrency(card.available),color:card.canAfford?'#10b981':'#f43f5e'},
-                      {label:'Days to Billing',val:`${card.daysToBilling}d`,color:urgencyColor(card.daysToBilling)},
-                      {label:'Days to Due',val:`${card.daysToDue}d`,color:urgencyColor(card.daysToDue)},
-                      {label:'Utilization',val:`${card.utilization}%`,color:'inherit'},
-                      {label:'Interest-Free Days',val:`${card.daysToBilling+card.daysToDue}d`,color:'#4361ee'},
-                    ].map(s=>(
-                      <div key={s.label} className="rec-stat">
-                        <div className="rec-stat-label">{s.label}</div>
-                        <div className="rec-stat-val" style={{color:s.color}}>{s.val}</div>
+            {(() => {
+              const affordable = results.recommendations.filter(c => c.canAfford);
+              const showCards = affordable.length > 0
+                ? affordable.slice(0, 3)
+                : [...results.recommendations].sort((a,b) => b.available - a.available).slice(0, 3);
+              const noneAffordable = affordable.length === 0;
+              return (
+                <>
+                  {noneAffordable && (
+                    <div className="advisor-no-afford">
+                      ⚠️ No card has enough limit for AED {Number(amount).toLocaleString()}. Showing the 3 cards with the highest available balance instead.
+                    </div>
+                  )}
+                  {showCards.map((card, i) => (
+                    <div key={card.id} className={`recommend-card ${i===0&&!noneAffordable?'best':''} ${noneAffordable?'fallback':''}`}>
+                      <div className="rec-rank">{i===0&&!noneAffordable?'⭐':`#${i+1}`}</div>
+                      <div className="rec-card-strip" style={{background:card.color||getBankColor(card.bank_name)}}/>
+                      <div className="rec-info">
+                        <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'4px',flexWrap:'wrap'}}>
+                          <div className="rec-name">{card.bank_name} <span className="rec-num">****{card.card_number.slice(-4)}</span></div>
+                          {i===0&&!noneAffordable && <span className="advisor-tag best-tag">BEST CHOICE</span>}
+                          {noneAffordable && <span className="advisor-tag" style={{background:'#fef3c7',color:'#b45309'}}>HIGHEST AVAILABLE</span>}
+                          {card.daysToBilling<=2&&card.canAfford && <span className="advisor-tag" style={{background:'#fef3c7',color:'#b45309'}}>⚠️ BILLING CLOSES SOON</span>}
+                        </div>
+                        <div className="rec-recommendation">{noneAffordable ? `Available: ${fmtCurrency(card.available)} — closest to your required amount` : card.recommendation}</div>
+                        <div className="rec-stats">
+                          {[
+                            {label:'Available',val:fmtCurrency(card.available),color:card.canAfford?'#10b981':'#f59e0b'},
+                            {label:'Credit Limit',val:fmtCurrency(card.credit_limit),color:'inherit'},
+                            {label:'Days to Billing',val:`${card.daysToBilling}d`,color:urgencyColor(card.daysToBilling)},
+                            {label:'Days to Due',val:`${card.daysToDue}d`,color:urgencyColor(card.daysToDue)},
+                            {label:'Interest-Free',val:`${card.daysToBilling+card.daysToDue}d`,color:'#4361ee'},
+                          ].map(s=>(
+                            <div key={s.label} className="rec-stat">
+                              <div className="rec-stat-label">{s.label}</div>
+                              <div className="rec-stat-val" style={{color:s.color}}>{s.val}</div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="rec-score-wrap">
-                  <div className="rec-score">{card.score}</div>
-                  <div className="rec-score-label">score</div>
-                </div>
-              </div>
-            ))}
+                      <div className="rec-score-wrap">
+                        <div className="rec-score">{card.score}</div>
+                        <div className="rec-score-label">score</div>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              );
+            })()}
           </div>
         )}
       </div>
@@ -471,7 +485,10 @@ function exportStatement(card, transactions) {
 
 // ─── Main App ─────────────────────────────────────────────────
 export default function App() {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    try { const s = sessionStorage.getItem('cc_user'); return s ? JSON.parse(s) : null; } catch { return null; }
+  });
+  const [logo, setLogo] = useState(localStorage.getItem('cc_logo')||null);
   const [dashboard,setDashboard]=useState(null);
   const [transactions,setTransactions]=useState([]);
   const [notifications,setNotifications]=useState([]);
@@ -485,27 +502,33 @@ export default function App() {
   const [loading,setLoading]=useState(true);
   const [txnFilter,setTxnFilter]=useState('all');
   const [toastMsg,setToastMsg]=useState('');
+  const logoInput=useRef();
 
   const toast=msg=>{setToastMsg(msg);setTimeout(()=>setToastMsg(''),3000);};
+  const handleLogin = (u) => { sessionStorage.setItem('cc_user', JSON.stringify(u)); setUser(u); };
+  const handleLogout = () => { sessionStorage.removeItem('cc_user'); setUser(null); };
+
+  const handleLogoUpload=e=>{
+    const file=e.target.files[0]; if(!file) return;
+    const reader=new FileReader();
+    reader.onload=ev=>{const d=ev.target.result;setLogo(d);localStorage.setItem('cc_logo',d);toast('✅ Logo updated!');};
+    reader.readAsDataURL(file);
+  };
 
   const loadDashboard=useCallback(async()=>{
     try{
-      const [dash, txns, notifs, anal] = await Promise.all([
-        fetch(`${API}/dashboard`).then(r => r.ok ? r.json() : Promise.reject('Dashboard failed')),
-        fetch(`${API}/transactions?limit=50`).then(r => r.ok ? r.json() : []),
-        fetch(`${API}/notifications`).then(r => r.ok ? r.json() : []),
-        fetch(`${API}/analytics/spending`).then(r => r.ok ? r.json() : null).catch(() => null),
+      const [dash,txns,notifs,anal]=await Promise.all([
+        fetch(`${API}/dashboard`).then(r=>r.json()),
+        fetch(`${API}/transactions?limit=50`).then(r=>r.json()),
+        fetch(`${API}/notifications`).then(r=>r.json()),
+        fetch(`${API}/analytics/spending`).then(r=>r.json()).catch(()=>null),
       ]);
       setDashboard(dash);
       setTransactions(Array.isArray(txns)?txns:[]);
       setNotifications(Array.isArray(notifs)?notifs:[]);
       setAnalytics(anal);
-    } catch(err){
-      console.error('Failed to load dashboard:', err);
-      toast('Failed to load data. Please refresh.');
-    } finally{
-      setLoading(false);
-    }
+    }catch(err){console.error(err);}
+    finally{setLoading(false);}
   },[]);
 
   useEffect(()=>{ if(user) loadDashboard(); },[user,loadDashboard]);
@@ -522,7 +545,7 @@ export default function App() {
   };
 
   // Show login if not authenticated
-  if (!user) return <LoginPage onLogin={setUser} />;
+  if (!user) return <LoginPage onLogin={handleLogin} logo={logo} />;
 
   if (loading) return(
     <div className="loading-screen">
@@ -542,11 +565,14 @@ export default function App() {
       <aside className="sidebar">
         <div className="sidebar-top">
           <div className="sidebar-logo">
-            <div className="login-logo-wrap">
-              <img src={companyLogo} alt="Company Logo" className="company-logo" />
+            <div className="logo-img-wrap" onClick={()=>logoInput.current.click()} title="Click to upload company logo" style={{cursor:'pointer'}}>
+              {logo?<img src={logo} alt="logo"/>:'◈'}
             </div>
-            <div className="logo-title">CC Manager</div>
-            <div className="logo-sub">HR Manager Dashboard</div>
+            <div>
+              <div className="logo-title">CC Manager</div>
+              <div className="logo-sub">Executive Dashboard</div>
+            </div>
+            <input ref={logoInput} type="file" accept="image/*" style={{display:'none'}} onChange={handleLogoUpload}/>
           </div>
         </div>
 
@@ -586,7 +612,7 @@ export default function App() {
               <div className="sidebar-user-name">{user.name}</div>
               <div className="sidebar-user-role">{user.role}</div>
             </div>
-            <button className="sidebar-logout" onClick={()=>setUser(null)} title="Sign out">⏏</button>
+            <button className="sidebar-logout" onClick={handleLogout} title="Sign out">⏏</button>
           </div>
           <div className="sidebar-util-wrap" style={{marginTop:'12px'}}>
             <div className="sidebar-util-label">Portfolio Utilization</div>
@@ -872,9 +898,9 @@ export default function App() {
 
       {/* ── Modals ── */}
       {showCardModal&&<CardModal card={editCard} onClose={()=>{setShowCardModal(false);setEditCard(null);}}
-        onSave={async()=>{setShowCardModal(false);setEditCard(null);await loadDashboard();toast(editCard?'✅ Card updated!':'✅ Card added!');}}/>}
+        onSave={()=>{setShowCardModal(false);setEditCard(null);loadDashboard();toast(editCard?'✅ Card updated!':'✅ Card added!');}}/>}
       {showTxnModal&&<TransactionModal cards={cards} onClose={()=>setShowTxnModal(false)}
-        onSave={async()=>{setShowTxnModal(false);await loadDashboard();toast('✅ Transaction added!');}}/>}
+        onSave={()=>{setShowTxnModal(false);loadDashboard();toast('✅ Transaction added!');}}/>}
       {showRecommend&&<RecommendModal onClose={()=>setShowRecommend(false)}/>}
     </div>
   );

@@ -80,14 +80,18 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); colo
 }
 
 .login-logo-wrap {
-  width: 80px; height: 80px;
-  background: rgba(255,255,255,.2);
-  border-radius: 20px;
-  display: flex; align-items: center; justify-content: center;
-  margin: 0 auto 24px;
-  font-size: 36px;
+  width: 180px;
+  height: 72px;
+  background: rgba(255,255,255,.95);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 28px;
+  padding: 10px 16px;
   backdrop-filter: blur(10px);
-  border: 1px solid rgba(255,255,255,.3);
+  border: 1px solid rgba(255,255,255,.4);
+  overflow: hidden;
 }
 
 .login-brand-name {
@@ -214,8 +218,34 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); colo
 }
 
 .sidebar-top {
-  padding: 24px 20px 20px;
+  padding: 16px 20px;
   border-bottom: 1px solid var(--border);
+}
+
+.sidebar-top .login-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  text-align: center;
+}
+
+.sidebar-top .login-logo-wrap {
+  width: 120px;
+  height: 48px;
+  background: transparent;
+  border: none;
+  backdrop-filter: none;
+  margin: 0 auto 4px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-top .login-brand-name {
+  display: none;
 }
 
 .sidebar-logo {
@@ -223,36 +253,6 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); colo
   align-items: center;
   gap: 12px;
 }
-
-
-/* Company logo image */
-.company-logo {
-  width: 340px;             /* adjust as needed */
-  height: 400;
-  object-fit: contain;
-  margin-bottom: 12px;
-}
-
-
-
-.sidebar-logo {
-  margin-top: 0;
-  position: sticky;
-  top: 0;
-  background: #ffffff;
-  z-index: 10;
-}
-
-.sidebar {
-  justify-content: flex-start;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-
-}
-
-
-
 
 .logo-img-wrap {
   width: 42px; height: 42px;
@@ -632,13 +632,34 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); colo
   .login-left { display:none; }
 }
 
-@media (max-width: 600px) {
-  .content { padding: 16px; }
-  .top-bar { padding: 14px 16px; }
-  .stats-row { grid-template-columns: 1fr 1fr; gap: 10px; }
-  .two-col { grid-template-columns: 1fr; }
-  .cards-scroll .credit-card { width: 260px; height: 155px; }
-  .form-grid { grid-template-columns: 1fr; }
-  .modal { padding: 20px 16px; border-radius: 16px 16px 0 0; }
-  .modal-overlay { align-items: flex-end; padding: 0; }
+/* ── Advisor no-afford warning ──────────────────────────── */
+.advisor-no-afford {
+  background: var(--gold-light);
+  border: 1.5px solid rgba(245,158,11,.3);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  font-size: 13px;
+  color: #92400e;
+  font-weight: 500;
+  margin-bottom: 12px;
+  line-height: 1.6;
+}
+
+.recommend-card.fallback {
+  border-color: rgba(245,158,11,.3);
+  background: var(--gold-light);
+}
+
+.recommend-card.fallback .rec-score {
+  color: var(--gold);
+}
+
+/* ── Company logo image ─────────────────────────────────── */
+.company-logo {
+  width: 100%;
+  max-width: 150px;
+  height: auto;
+  max-height: 52px;
+  object-fit: contain;
+  display: block;
 }
