@@ -20,6 +20,7 @@ const { runDailyNotificationCheck } = require('./services/notificationService');
 const PORT = process.env.PORT || 3001;
 
 // Middleware
+console.log('✅ REGISTERING ROUTES...');
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
