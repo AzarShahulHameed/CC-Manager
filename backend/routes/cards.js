@@ -7,7 +7,7 @@ const pool = require('../db');
 router.get('/', async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT * FROM credit_cards ORDER BY created_at DESC'
+      'SELECT * FROM credit_cards ORDER BY id DESC'
     );
     res.json(result.rows);
   } catch (err) {
