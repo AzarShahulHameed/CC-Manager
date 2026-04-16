@@ -889,9 +889,9 @@ export default function App() {
 
       {/* ── Modals ── */}
       {showCardModal&&<CardModal card={editCard} onClose={()=>{setShowCardModal(false);setEditCard(null);}}
-        onSave={()=>{setShowCardModal(false);setEditCard(null);loadDashboard();toast(editCard?'✅ Card updated!':'✅ Card added!');}}/>}
+        onSave={async()=>{setShowCardModal(false);setEditCard(null);await loadDashboard();toast(editCard?'✅ Card updated!':'✅ Card added!');}}/>}
       {showTxnModal&&<TransactionModal cards={cards} onClose={()=>setShowTxnModal(false)}
-        onSave={()=>{setShowTxnModal(false);loadDashboard();toast('✅ Transaction added!');}}/>}
+        onSave={async()=>{setShowTxnModal(false);await loadDashboard();toast('✅ Transaction added!');}}/>}
       {showRecommend&&<RecommendModal onClose={()=>setShowRecommend(false)}/>}
     </div>
   );
