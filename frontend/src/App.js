@@ -305,47 +305,100 @@ function CardModal({ card, onClose, onSave }) {
 
 // ─── Transaction Modal ────────────────────────────────────────
 function TransactionModal({ cards, onClose, onSave }) {
-  const [form,setForm]=useState({card_id:'',amount:'',description:'',type:'charge'});
-  const handleSubmit=async e=>{
+  const [form, setForm] = useState({
+    card_id: '',
+    amount: '',
+    description: '',
+    type: 'charge'
+  });
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    try{
-      const res=await fetch(`${API}/transactions`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)});
-      if(!res.ok) throw new Error('Failed');
-      onSave();
-    }catch(err){alert('Error: '+err.message);}
+
+    try {
+      const payload = {
+        card_id: Number(form.card_id),        // ✅ convert to number
+        amount: Number(form.amount),          // ✅ convert to number
+        description: form.description,
+        type: form.type
+      };
+
+      const res = await fetch(`${API}/transactions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) throw new Error('Failed to add transaction');
+
+      await onSave();                         // ✅ wait for reload
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
   };
-  return(
+
+  return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal modal-sm" onClick={e=>e.stopPropagation()}>
-        <div className="modal-header"><h2>💳 Add Transaction</h2><button className="close-btn" onClick={onClose}>✕</button></div>
+      <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>💳 Add Transaction</h2>
+          <button className="close-btn" onClick={onClose}>✕</button>
+        </div>
+
         <form onSubmit={handleSubmit} className="card-form">
-          <div style={{display:'flex',flexDirection:'column',gap:'16px',marginBottom:'22px'}}>
-            {[
-              {label:'Card',type:'select',options:cards.map(c=>({v:c.id,l:`${c.bank_name} — ****${c.card_number.slice(-4)}`})),key:'card_id'},
-            ].map(()=>null)}
-            <div className="form-group"><label>Card</label>
-              <select value={form.card_id} onChange={e=>setForm(f=>({...f,card_id:e.target.value}))} required>
-                <option value="">Select Card</option>
-                {cards.map(c=><option key={c.id} value={c.id}>{c.bank_name} — ****{c.card_number.slice(-4)}</option>)}
-              </select>
-            </div>
-            <div className="form-group"><label>Type</label>
-              <select value={form.type} onChange={e=>setForm(f=>({...f,type:e.target.value}))}>
-                <option value="charge">💳 Charge</option>
-                <option value="payment">✅ Payment</option>
-                <option value="adjustment">⚖️ Adjustment</option>
-              </select>
-            </div>
-            <div className="form-group"><label>Amount (AED)</label>
-              <input type="number" value={form.amount} onChange={e=>setForm(f=>({...f,amount:e.target.value}))} required placeholder="0.00"/>
-            </div>
-            <div className="form-group"><label>Description</label>
-              <input value={form.description} onChange={e=>setForm(f=>({...f,description:e.target.value}))} placeholder="e.g. Hotel, Flight, Dinner"/>
-            </div>
+          <div className="form-group">
+            <label>Card</label>
+            <select
+              value={form.card_id}
+              onChange={e => setForm(f => ({ ...f, card_id: e.target.value }))}
+              required
+            >
+              <option value="">Select Card</option>
+              {cards.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.bank_name} — ****{c.card_number.slice(-4)}
+                </option>
+              ))}
+            </select>
           </div>
+
+          <div className="form-group">
+            <label>Type</label>
+            <select
+              value={form.type}
+              onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
+            >
+              <option value="charge">💳 Charge</option>
+              <option value="payment">✅ Payment</option>
+              <option value="adjustment">⚖️ Adjustment</option>
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label>Amount (AED)</label>
+            <input
+              type="number"
+              value={form.amount}
+              onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
+              required
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Description</label>
+            <input
+              value={form.description}
+              onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+            />
+          </div>
+
           <div className="form-actions">
-            <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-primary">Add Transaction</button>
+            <button type="button" className="btn btn-ghost" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className="btn btn-primary">
+              Add Transaction
+            </button>
           </div>
         </form>
       </div>
@@ -897,11 +950,40 @@ export default function App() {
       </main>
 
       {/* ── Modals ── */}
-      {showCardModal&&<CardModal card={editCard} onClose={()=>{setShowCardModal(false);setEditCard(null);}}
-        onSave={()=>{setShowCardModal(false);setEditCard(null);loadDashboard();toast(editCard?'✅ Card updated!':'✅ Card added!');}}/>}
-      {showTxnModal&&<TransactionModal cards={cards} onClose={()=>setShowTxnModal(false)}
-        onSave={()=>{setShowTxnModal(false);loadDashboard();toast('✅ Transaction added!');}}/>}
-      {showRecommend&&<RecommendModal onClose={()=>setShowRecommend(false)}/>}
-    </div>
-  );
+     
+
+{showCardModal && (
+      <CardModal
+        card={editCard}
+        onClose={() => {
+          setShowCardModal(false);
+          setEditCard(null);
+        }}
+        onSave={async () => {
+          setShowCardModal(false);
+          setEditCard(null);
+          await loadDashboard();
+          toast(editCard ? '✅ Card updated!' : '✅ Card added!');
+        }}
+      />
+    )}
+
+    {showTxnModal && (
+      <TransactionModal
+        cards={cards}
+        onClose={() => setShowTxnModal(false)}
+        onSave={async () => {
+          setShowTxnModal(false);
+          await loadDashboard();
+          toast('✅ Transaction added!');
+        }}
+      />
+    )}
+
+    {showRecommend && (
+      <RecommendModal onClose={() => setShowRecommend(false)} />
+    )}
+
+  </div>
+);
 }
