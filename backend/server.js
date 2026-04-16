@@ -1,4 +1,7 @@
 console.log('🔥 CORRECT BACKEND server.js LOADED');
+app.get('/', (req, res) => {
+  res.send('CC Manager Backend is running');
+});
 require('dotenv').config();
 
 const express = require('express');
@@ -24,11 +27,18 @@ console.log('✅ REGISTERING ROUTES...');
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
+
 // Routes
-// app.use('/api/cards', cardRoutes);
-// app.use('/api/transactions', transactionRoutes);
-// app.use('/api/notifications', notificationRoutes);
-// app.use('/api/analytics', analyticsRoutes);
+app.use('/api/cards', cardRoutes);
+app.use('/api/transactions', transactionRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/analytics', analyticsRoutes);
+
+// Catch‑all 404 (must be LAST)
+app.use((req, res) => {
+  console.log('❗ Unmatched path reached Express:', req.method, req.path);
+  res.status(404).json({ error: 'Route not found', path: req.path });
+});
 
 // ✅ Health check
 app.get('/api/health', (req, res) => {
