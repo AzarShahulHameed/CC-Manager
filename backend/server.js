@@ -1,3 +1,4 @@
+console.log('🔥 CORRECT BACKEND server.js LOADED');
 require('dotenv').config();
 
 const express = require('express');
