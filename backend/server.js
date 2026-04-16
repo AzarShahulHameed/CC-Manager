@@ -23,41 +23,40 @@ const PORT = process.env.PORT || 3001;
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
-// ✅ Root route
+/* ================= ROOT ================= */
 app.get('/', (req, res) => {
   res.send('CC Manager Backend is running');
 });
 
-// ✅ API routes
+/* ================= API ROUTES ================= */
 console.log('✅ REGISTERING ROUTES...');
 app.use('/api/cards', cardRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/analytics', analyticsRoutes);
 
-// ✅ Health check
+/* ================= SINGLE ROUTES ================= */
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// ✅ Dashboard
 app.get('/api/dashboard', async (req, res) => {
   const result = await pool.query('SELECT * FROM credit_cards');
   res.json(result.rows);
 });
 
-// ✅ CRON
+/* ================= CRON ================= */
 cron.schedule('0 9 * * *', () => {
   runDailyNotificationCheck(pool);
 });
 
-// ✅ 404 handler — MUST BE LAST
+/* ================= 404 — ABSOLUTE LAST ================= */
 app.use((req, res) => {
   console.log('❗ Unmatched path reached Express:', req.method, req.path);
   res.status(404).json({ error: 'Route not found', path: req.path });
 });
 
-// ✅ Start server LAST
+/* ================= LISTEN ================= */
 app.listen(PORT, () => {
   console.log(`✅ CC Manager API running on port ${PORT}`);
 });
