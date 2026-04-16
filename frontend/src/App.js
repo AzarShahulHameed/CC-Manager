@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './App.css';
 
-const API = 'http://localhost:3001/api';
+const API = 'https://cc-manager-8sgi.onrender.com';
 
 // ─── Demo credentials (replace with real auth backend) ───────
 const DEMO_USER = { username: 'admin', password: 'ceo2024', name: 'CEO', role: 'Executive' };
