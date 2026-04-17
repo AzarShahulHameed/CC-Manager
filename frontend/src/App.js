@@ -29,8 +29,8 @@ function urgencyColor(days) {
   return '#10b981';
 }
 const BANK_COLORS = {
-  'emirates nbd':'#c8a94a','adcb':'#0052A5','fab':'#1a5c38',
-  'mashreq':'#c0392b','hsbc':'#aa0000','standard chartered':'#005f8a',
+  'emirates nbd':'#c8a94a','ei':'#0052A5','fab':'#1a5c38',
+  'mashreq':'#c0392b','ei flex':'#aa0000','du titanium':'#005f8a',
   'citibank':'#003B8E','rak bank':'#6b0f0f','dib':'#00573F',
 };
 function getBankColor(n) {
@@ -251,7 +251,7 @@ function CardModal({ card, onClose, onSave }) {
       alert('Error saving card: ' + err.message + '\n\nCheck your backend is running at: ' + `${API}`);
     }finally{setSaving(false);}
   };
-  const banks=['Emirates NBD','ADCB','FAB','Mashreq','HSBC','Standard Chartered','Citibank','RAK Bank','DIB','Other'];
+  const banks=['Emirates NBD','Emirates Islamic','FAB','Mashreq','Emirates Islamic Flex','Du Titanium','Citibank','RAK Bank','DIB','Other'];
   return(
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e=>e.stopPropagation()}>
