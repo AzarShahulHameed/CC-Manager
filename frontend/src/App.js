@@ -4,7 +4,7 @@ import './App.css';
 const API = 'https://cc-manager-8sgi.onrender.com/api';
 
 // ─── Demo credentials (replace with real auth backend) ───────
-const DEMO_USER = { username: 'admin', password: 'ceo2024', name: 'CEO', role: 'Executive' };
+const DEMO_USER = { username: 'Admin Catapult', password: 'cat@2026', name: 'Saraswathy N', role: 'HR Manager' };
 
 // ─── Utilities ───────────────────────────────────────────────
 function maskCard(num) {
@@ -54,7 +54,7 @@ function LoginPage({ onLogin, logo }) {
     if (form.username === DEMO_USER.username && form.password === DEMO_USER.password) {
       onLogin(DEMO_USER);
     } else {
-      setError('Invalid username or password. Try admin / ceo2024');
+      setError('Invalid username or password');
     }
     setLoading(false);
   };
@@ -72,7 +72,7 @@ function LoginPage({ onLogin, logo }) {
             {logo ? <img src={logo} alt="logo" style={{width:'100%',height:'100%',objectFit:'cover',borderRadius:'18px'}} /> : '◈'}
           </div>
           <div className="login-brand-name">CC Manager</div>
-          <div className="login-brand-sub">Executive Credit Card Dashboard</div>
+          <div className="login-brand-sub">Credit Card Dashboard</div>
         </div>
         <div className="login-features">
           {[
@@ -115,7 +115,6 @@ function LoginPage({ onLogin, logo }) {
               {loading ? '⏳ Signing in...' : '→ Sign In'}
             </button>
           </form>
-          <div className="login-hint">Demo: admin / ceo2024</div>
         </div>
       </div>
     </div>
