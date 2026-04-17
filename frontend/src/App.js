@@ -247,7 +247,7 @@ function CardModal({ card, onClose, onSave }) {
       }
       onSave();
     }catch(err){
-      alert('Error saving card: ' + err.message + '\n\nCheck your backend is running at: ' + `${API}`);
+      alert(`Error saving card: ${err.message}\n\nCheck your backend is running at: ${API}`);
     }finally{setSaving(false);}
   };
   const banks=['Emirates NBD','Emirates Islamic','FAB','Mashreq','Emirates Islamic Flex','Du Titanium','Citibank','RAK Bank','DIB','Other'];
