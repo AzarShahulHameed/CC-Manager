@@ -112,26 +112,41 @@ app.get('/api/recommend', async (req, res) => {
 
       const utilization = (Number(card.outstanding_balance) / Number(card.credit_limit)) * 100;
 
+      // ── SCORING LOGIC ─────────────────────────────────────────
+      // Interest-free days = days until billing closes + days until due
+      // This is the MOST important factor: the longer you can hold
+      // the money before paying, the better — regardless of limit.
+      const interestFreeDays = daysToBilling + daysToDue;
+
       let score = 0;
       if (canAfford) {
-        score += daysToBilling * 3;
-        score += daysToDue * 2;
-        score += (100 - utilization);
-        score += (available / 1000);
+        // PRIMARY: interest-free days (most important — weighted heavily)
+        score += interestFreeDays * 10;
+        // SECONDARY: days to billing alone (earlier billing = less interest-free time)
+        score += daysToBilling * 5;
+        // TERTIARY: lower utilization is better for credit health
+        score += (100 - utilization) * 0.5;
+        // MINOR: more available headroom is a small bonus
+        score += (available / 10000);
       } else {
-        // Still score so we can rank by available balance when none can afford
-        score = available / 100;
+        // When no card can afford the amount:
+        // PRIMARY sort: most interest-free days (so you know the best timing)
+        // SECONDARY sort: highest available balance (closest to your need)
+        score += interestFreeDays * 10;
+        score += (available / 10000);
       }
 
       let recommendation = '';
       if (!canAfford) {
-        recommendation = `Insufficient limit — only AED ${available.toLocaleString()} available`;
-      } else if (daysToBilling >= 5) {
-        recommendation = 'BEST CHOICE — billing cycle not closing soon, maximise interest-free period';
+        recommendation = `Limit insufficient — AED ${available.toLocaleString()} available, ${interestFreeDays}d interest-free window`;
+      } else if (daysToBilling >= 7) {
+        recommendation = 'BEST CHOICE — billing far away, maximum interest-free period available';
+      } else if (daysToBilling >= 4) {
+        recommendation = 'GOOD CHOICE — moderate billing window, decent interest-free period';
       } else if (daysToBilling <= 2) {
-        recommendation = 'CAUTION — billing date is very close, charge will appear this month';
+        recommendation = 'CAUTION — billing closes very soon, charge will appear on this month\'s statement';
       } else {
-        recommendation = 'GOOD CHOICE — moderate billing window remaining';
+        recommendation = 'ACCEPTABLE — billing closes soon but still within the window';
       }
 
       return {
