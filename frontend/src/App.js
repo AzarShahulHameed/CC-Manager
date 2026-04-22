@@ -4,7 +4,7 @@ import './App.css';
 const API = 'https://cc-manager-8sgi.onrender.com/api';
 
 // ─── Demo credentials (replace with real auth backend) ───────
-const DEMO_USER = { username: 'Admin Catpult', password: 'cat@2026', name: 'Saraswathy N', role: 'HR Manager' };
+const DEMO_USER = { username: 'Admin Catapult', password: 'cat@2026', name: 'Saraswathy N', role: 'HR Manager' };
 
 // ─── Utilities ───────────────────────────────────────────────
 function maskCard(num) {
@@ -115,7 +115,6 @@ function LoginPage({ onLogin, logo }) {
               {loading ? '⏳ Signing in...' : '→ Sign In'}
             </button>
           </form>
-          <div className="login-hint">Demo: admin / ceo2024</div>
         </div>
       </div>
     </div>
