@@ -4,7 +4,7 @@ import './App.css';
 const API = 'https://cc-manager-8sgi.onrender.com/api';
 
 // ─── Demo credentials (replace with real auth backend) ───────
-const DEMO_USER = { username: 'Admin Catapult', password: 'cat@2026', name: 'Saraswathy N', role: 'HR Manager' };
+const DEMO_USER = { username: 'admin', password: 'ceo2024', name: 'CEO', role: 'Executive' };
 
 // ─── Utilities ───────────────────────────────────────────────
 function maskCard(num) {
@@ -29,8 +29,8 @@ function urgencyColor(days) {
   return '#10b981';
 }
 const BANK_COLORS = {
-  'emirates nbd':'#c8a94a','ei':'#0052A5','fab':'#1a5c38',
-  'mashreq':'#c0392b','ei flex':'#aa0000','du titanium':'#005f8a',
+  'emirates nbd':'#c8a94a','adcb':'#0052A5','fab':'#1a5c38',
+  'mashreq':'#c0392b','hsbc':'#aa0000','standard chartered':'#005f8a',
   'citibank':'#003B8E','rak bank':'#6b0f0f','dib':'#00573F',
 };
 function getBankColor(n) {
@@ -54,7 +54,7 @@ function LoginPage({ onLogin, logo }) {
     if (form.username === DEMO_USER.username && form.password === DEMO_USER.password) {
       onLogin(DEMO_USER);
     } else {
-      setError('Invalid username or password');
+      setError('Invalid username or password. Try admin / ceo2024');
     }
     setLoading(false);
   };
@@ -72,7 +72,7 @@ function LoginPage({ onLogin, logo }) {
             {logo ? <img src={logo} alt="logo" style={{width:'100%',height:'100%',objectFit:'cover',borderRadius:'18px'}} /> : '◈'}
           </div>
           <div className="login-brand-name">CC Manager</div>
-          <div className="login-brand-sub">Credit Card Dashboard</div>
+          <div className="login-brand-sub">Executive Credit Card Dashboard</div>
         </div>
         <div className="login-features">
           {[
@@ -115,6 +115,7 @@ function LoginPage({ onLogin, logo }) {
               {loading ? '⏳ Signing in...' : '→ Sign In'}
             </button>
           </form>
+          <div className="login-hint">Demo: admin / ceo2024</div>
         </div>
       </div>
     </div>
@@ -211,10 +212,9 @@ function InlineBalance({ card, onUpdated }) {
   const ref=useRef();
   const save=async()=>{
     try {
-      const res = await fetch(`${API}/cards/${card.id}/balance`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({outstanding_balance:parseFloat(val)||0})});
-      if(!res.ok) throw new Error('Update failed');
+      await fetch(`${API}/cards/${card.id}/balance`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({outstanding_balance:parseFloat(val)||0})});
       setEditing(false); onUpdated();
-    } catch(e){ console.error('Balance update failed:', e.message); setEditing(false); }
+    } catch{setEditing(false);}
   };
   useEffect(()=>{if(editing&&ref.current)ref.current.focus();},[editing]);
   if(editing) return(
@@ -241,16 +241,11 @@ function CardModal({ card, onClose, onSave }) {
     e.preventDefault();setSaving(true);
     try{
       const res=await fetch(card?`${API}/cards/${card.id}`:`${API}/cards`,{method:card?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...form,color:rc})});
-      if(!res.ok){
-        const errData = await res.json().catch(()=>({}));
-        throw new Error(errData.error || `Server error ${res.status}`);
-      }
+      if(!res.ok) throw new Error('Save failed');
       onSave();
-    }catch(err){
-      alert(`Error saving card: ${err.message}\n\nCheck your backend is running at: ${API}`);
-    }finally{setSaving(false);}
+    }catch(err){alert('Error: '+err.message);}finally{setSaving(false);}
   };
-  const banks=['Emirates NBD','Emirates Islamic','FAB','Mashreq','Emirates Islamic Flex','Du Titanium','Citibank','RAK Bank','DIB','Other'];
+  const banks=['Emirates NBD','ADCB','FAB','Mashreq','HSBC','Standard Chartered','Citibank','RAK Bank','DIB','Other'];
   return(
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e=>e.stopPropagation()}>
@@ -322,8 +317,8 @@ function TransactionModal({ cards, onClose, onSave }) {
 
     try {
       const payload = {
-        card_id: Number(form.card_id),
-        amount: Number(form.amount),
+        card_id: Number(form.card_id),        // ✅ convert to number
+        amount: Number(form.amount),          // ✅ convert to number
         description: form.description,
         type: form.type
       };
@@ -336,7 +331,7 @@ function TransactionModal({ cards, onClose, onSave }) {
 
       if (!res.ok) throw new Error('Failed to add transaction');
 
-      await onSave();
+      await onSave();                         // ✅ wait for reload
     } catch (err) {
       alert('Error: ' + err.message);
     }
@@ -475,27 +470,27 @@ function RecommendModal({ onClose }) {
               const affordable = results.recommendations.filter(c => c.canAfford);
               const showCards = affordable.length > 0
                 ? affordable.slice(0, 3)
-                : [...results.recommendations].sort((a,b) => b.available - a.available).slice(0, 3);
+                : [...results.recommendations].sort((a,b) => b.score - a.score).slice(0, 3);
               const noneAffordable = affordable.length === 0;
               return (
                 <>
                   {noneAffordable && (
                     <div className="advisor-no-afford">
-                      ⚠️ No card has enough limit for AED {Number(amount).toLocaleString()}. Showing the 3 cards with the highest available balance instead.
+                      ⚠️ No card has enough limit for AED {Number(amount).toLocaleString()}. Showing the 3 best options ranked by interest-free days.
                     </div>
                   )}
                   {showCards.map((card, i) => (
-                    <div key={card.id} className={`recommend-card ${i===0&&!noneAffordable?'best':''} ${noneAffordable?'fallback':''}`}>
-                      <div className="rec-rank">{i===0&&!noneAffordable?'⭐':`#${i+1}`}</div>
+                    <div key={card.id} className={`recommend-card ${i===0?'best':''} ${noneAffordable&&i>0?'fallback':''}`}>
+                      <div className="rec-rank">{i===0?'⭐':`#${i+1}`}</div>
                       <div className="rec-card-strip" style={{background:card.color||getBankColor(card.bank_name)}}/>
                       <div className="rec-info">
                         <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'4px',flexWrap:'wrap'}}>
                           <div className="rec-name">{card.bank_name} <span className="rec-num">****{card.card_number.slice(-4)}</span></div>
-                          {i===0&&!noneAffordable && <span className="advisor-tag best-tag">BEST CHOICE</span>}
+                          {i===0 && <span className="advisor-tag best-tag">{noneAffordable ? 'BEST OPTION' : 'BEST CHOICE'}</span>}
                           {noneAffordable && <span className="advisor-tag" style={{background:'#fef3c7',color:'#b45309'}}>HIGHEST AVAILABLE</span>}
                           {card.daysToBilling<=2&&card.canAfford && <span className="advisor-tag" style={{background:'#fef3c7',color:'#b45309'}}>⚠️ BILLING CLOSES SOON</span>}
                         </div>
-                        <div className="rec-recommendation">{noneAffordable ? `Available: ${fmtCurrency(card.available)} — closest to your required amount` : card.recommendation}</div>
+                        <div className="rec-recommendation">{noneAffordable ? card.recommendation : card.recommendation}</div>
                         <div className="rec-stats">
                           {[
                             {label:'Available',val:fmtCurrency(card.available),color:card.canAfford?'#10b981':'#f59e0b'},
@@ -573,51 +568,28 @@ export default function App() {
     reader.readAsDataURL(file);
   };
 
-  const fetchWithTimeout = useCallback(async(url, opts={}, ms=15000) => {
-    const controller = new AbortController();
-    const tid = setTimeout(() => controller.abort(), ms);
-    try {
-      const r = await fetch(url, { ...opts, signal: controller.signal });
-      clearTimeout(tid);
-      if (!r.ok) throw new Error(`HTTP ${r.status} from ${url}`);
-      return await r.json();
-    } catch(e) { clearTimeout(tid); throw e; }
-  }, []);
-
   const loadDashboard=useCallback(async()=>{
-    setLoading(true);
     try{
       const [dash,txns,notifs,anal]=await Promise.all([
-        fetchWithTimeout(`${API}/dashboard`),
-        fetchWithTimeout(`${API}/transactions?limit=50`).catch(()=>[]),
-        fetchWithTimeout(`${API}/notifications`).catch(()=>[]),
-        fetchWithTimeout(`${API}/analytics/spending`).catch(()=>null),
+        fetch(`${API}/dashboard`).then(r=>r.json()),
+        fetch(`${API}/transactions?limit=50`).then(r=>r.json()),
+        fetch(`${API}/notifications`).then(r=>r.json()),
+        fetch(`${API}/analytics/spending`).then(r=>r.json()).catch(()=>null),
       ]);
-      if(dash && !dash.error){
-        setDashboard(dash);
-      } else {
-        console.error('Dashboard API error:', dash?.error);
-        setDashboard({ totalLimit:0, totalOutstanding:0, availableCredit:0, utilizationRate:0, cards:[], recentTransactions:[] });
-      }
+      setDashboard(dash);
       setTransactions(Array.isArray(txns)?txns:[]);
       setNotifications(Array.isArray(notifs)?notifs:[]);
       setAnalytics(anal);
-    }catch(err){
-      console.error('Dashboard load failed:', err.message);
-      setDashboard({ totalLimit:0, totalOutstanding:0, availableCredit:0, utilizationRate:0, cards:[], recentTransactions:[] });
-      setTransactions([]); setNotifications([]);
-    }
+    }catch(err){console.error(err);}
     finally{setLoading(false);}
-  },[fetchWithTimeout]);
+  },[]);
 
   useEffect(()=>{ if(user) loadDashboard(); },[user,loadDashboard]);
 
   const handleDeleteCard=async id=>{
     if(!window.confirm('Delete this card and all its data?')) return;
-    try {
-      await fetchWithTimeout(`${API}/cards/${id}`,{method:'DELETE'});
-      setSelectedCard(null); loadDashboard(); toast('Card deleted.');
-    } catch(e){ toast('❌ Delete failed — check connection'); }
+    await fetch(`${API}/cards/${id}`,{method:'DELETE'});
+    setSelectedCard(null); loadDashboard(); toast('Card deleted.');
   };
 
   const handleTriggerNotifications=async()=>{
@@ -625,6 +597,7 @@ export default function App() {
     toast('✅ Notification check triggered!'); loadDashboard();
   };
 
+  // Show login if not authenticated
   if (!user) return <LoginPage onLogin={handleLogin} logo={logo} />;
 
   if (loading) return(
@@ -977,38 +950,40 @@ export default function App() {
       </main>
 
       {/* ── Modals ── */}
-      {showCardModal && (
-        <CardModal
-          card={editCard}
-          onClose={() => {
-            setShowCardModal(false);
-            setEditCard(null);
-          }}
-          onSave={async () => {
-            setShowCardModal(false);
-            setEditCard(null);
-            await loadDashboard();
-            toast(editCard ? '✅ Card updated!' : '✅ Card added!');
-          }}
-        />
-      )}
+     
 
-      {showTxnModal && (
-        <TransactionModal
-          cards={cards}
-          onClose={() => setShowTxnModal(false)}
-          onSave={async () => {
-            setShowTxnModal(false);
-            await loadDashboard();
-            toast('✅ Transaction added!');
-          }}
-        />
-      )}
+{showCardModal && (
+      <CardModal
+        card={editCard}
+        onClose={() => {
+          setShowCardModal(false);
+          setEditCard(null);
+        }}
+        onSave={async () => {
+          setShowCardModal(false);
+          setEditCard(null);
+          await loadDashboard();
+          toast(editCard ? '✅ Card updated!' : '✅ Card added!');
+        }}
+      />
+    )}
 
-      {showRecommend && (
-        <RecommendModal onClose={() => setShowRecommend(false)} />
-      )}
+    {showTxnModal && (
+      <TransactionModal
+        cards={cards}
+        onClose={() => setShowTxnModal(false)}
+        onSave={async () => {
+          setShowTxnModal(false);
+          await loadDashboard();
+          toast('✅ Transaction added!');
+        }}
+      />
+    )}
 
-    </div>
-  );
+    {showRecommend && (
+      <RecommendModal onClose={() => setShowRecommend(false)} />
+    )}
+
+  </div>
+);
 }
