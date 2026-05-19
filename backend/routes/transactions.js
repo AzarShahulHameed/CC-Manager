@@ -33,28 +33,32 @@ router.get('/', async (req, res) => {
 
 // POST add transaction
 router.post('/', async (req, res) => {
-  const { card_id, amount, description, type = 'charge' } = req.body;
+  const { card_id, amount, description, type = 'charge', transaction_date } = req.body;
 
   if (!card_id || !amount) {
     return res.status(400).json({ error: 'card_id and amount required' });
   }
+
+  // Use provided date or default to now
+  const txnDate = transaction_date ? new Date(transaction_date) : new Date();
 
   const client = await pool.connect();
 
   try {
     await client.query('BEGIN');
 
-    // Insert transaction
+    // Insert transaction with custom date
     await client.query(
       `
-      INSERT INTO transactions (card_id, amount, description, type)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO transactions (card_id, amount, description, type, transaction_date)
+      VALUES ($1, $2, $3, $4, $5)
       `,
       [
         card_id,
         parseFloat(amount),
         description || '',
-        type
+        type,
+        txnDate
       ]
     );
 

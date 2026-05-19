@@ -4,7 +4,7 @@ import './App.css';
 const API = 'https://cc-manager-8sgi.onrender.com/api';
 
 // ─── Demo credentials (replace with real auth backend) ───────
-const DEMO_USER = { username: 'Admin Catapult', password: 'cat@2026', name: 'Saraswathy N', role: 'HR Manager' };
+const DEMO_USER = { username: 'admin', password: 'ceo2024', name: 'CEO', role: 'Executive' };
 
 // ─── Utilities ───────────────────────────────────────────────
 function maskCard(num) {
@@ -54,7 +54,7 @@ function LoginPage({ onLogin, logo }) {
     if (form.username === DEMO_USER.username && form.password === DEMO_USER.password) {
       onLogin(DEMO_USER);
     } else {
-      setError('Invalid username or password');
+      setError('Invalid username or password. Try admin / ceo2024');
     }
     setLoading(false);
   };
@@ -115,6 +115,7 @@ function LoginPage({ onLogin, logo }) {
               {loading ? '⏳ Signing in...' : '→ Sign In'}
             </button>
           </form>
+          <div className="login-hint">Demo: admin / ceo2024</div>
         </div>
       </div>
     </div>
@@ -304,11 +305,13 @@ function CardModal({ card, onClose, onSave }) {
 
 // ─── Transaction Modal ────────────────────────────────────────
 function TransactionModal({ cards, onClose, onSave }) {
+  const today = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({
     card_id: '',
     amount: '',
     description: '',
-    type: 'charge'
+    type: 'charge',
+    transaction_date: today
   });
 
   const handleSubmit = async (e) => {
@@ -316,10 +319,11 @@ function TransactionModal({ cards, onClose, onSave }) {
 
     try {
       const payload = {
-        card_id: Number(form.card_id),        // ✅ convert to number
-        amount: Number(form.amount),          // ✅ convert to number
+        card_id: Number(form.card_id),
+        amount: Number(form.amount),
         description: form.description,
-        type: form.type
+        type: form.type,
+        transaction_date: form.transaction_date  // ✅ custom date
       };
 
       const res = await fetch(`${API}/transactions`, {
@@ -388,6 +392,18 @@ function TransactionModal({ cards, onClose, onSave }) {
             <input
               value={form.description}
               onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+              placeholder="e.g. Hotel, Flight, Dinner"
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Transaction Date</label>
+            <input
+              type="date"
+              value={form.transaction_date}
+              max={new Date().toISOString().slice(0,10)}
+              onChange={e => setForm(f => ({ ...f, transaction_date: e.target.value }))}
+              required
             />
           </div>
 
@@ -469,27 +485,27 @@ function RecommendModal({ onClose }) {
               const affordable = results.recommendations.filter(c => c.canAfford);
               const showCards = affordable.length > 0
                 ? affordable.slice(0, 3)
-                : [...results.recommendations].sort((a,b) => b.score - a.score).slice(0, 3);
+                : [...results.recommendations].sort((a,b) => b.available - a.available).slice(0, 3);
               const noneAffordable = affordable.length === 0;
               return (
                 <>
                   {noneAffordable && (
                     <div className="advisor-no-afford">
-                      ⚠️ No card has enough limit for AED {Number(amount).toLocaleString()}. Showing the 3 best options ranked by interest-free days.
+                      ⚠️ No card has enough limit for AED {Number(amount).toLocaleString()}. Showing the 3 cards with the highest available balance instead.
                     </div>
                   )}
                   {showCards.map((card, i) => (
-                    <div key={card.id} className={`recommend-card ${i===0?'best':''} ${noneAffordable&&i>0?'fallback':''}`}>
-                      <div className="rec-rank">{i===0?'⭐':`#${i+1}`}</div>
+                    <div key={card.id} className={`recommend-card ${i===0&&!noneAffordable?'best':''} ${noneAffordable?'fallback':''}`}>
+                      <div className="rec-rank">{i===0&&!noneAffordable?'⭐':`#${i+1}`}</div>
                       <div className="rec-card-strip" style={{background:card.color||getBankColor(card.bank_name)}}/>
                       <div className="rec-info">
                         <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'4px',flexWrap:'wrap'}}>
                           <div className="rec-name">{card.bank_name} <span className="rec-num">****{card.card_number.slice(-4)}</span></div>
-                          {i===0 && <span className="advisor-tag best-tag">{noneAffordable ? 'BEST OPTION' : 'BEST CHOICE'}</span>}
+                          {i===0&&!noneAffordable && <span className="advisor-tag best-tag">BEST CHOICE</span>}
                           {noneAffordable && <span className="advisor-tag" style={{background:'#fef3c7',color:'#b45309'}}>HIGHEST AVAILABLE</span>}
                           {card.daysToBilling<=2&&card.canAfford && <span className="advisor-tag" style={{background:'#fef3c7',color:'#b45309'}}>⚠️ BILLING CLOSES SOON</span>}
                         </div>
-                        <div className="rec-recommendation">{noneAffordable ? card.recommendation : card.recommendation}</div>
+                        <div className="rec-recommendation">{noneAffordable ? `Available: ${fmtCurrency(card.available)} — closest to your required amount` : card.recommendation}</div>
                         <div className="rec-stats">
                           {[
                             {label:'Available',val:fmtCurrency(card.available),color:card.canAfford?'#10b981':'#f59e0b'},
