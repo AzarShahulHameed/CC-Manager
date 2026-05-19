@@ -30,8 +30,8 @@ function urgencyColor(days) {
 }
 const BANK_COLORS = {
   'emirates nbd':'#c8a94a','adcb':'#0052A5','fab':'#1a5c38',
-  'mashreq':'#c0392b','hsbc':'#aa0000','standard chartered':'#005f8a',
-  'citibank':'#003B8E','rak bank':'#6b0f0f','dib':'#00573F',
+  'mashreq':'#c0392b','hsbc':'#aa0000','eiflex':'#005f8a',
+  'emiratesislamic':'#003B8E','rak bank':'#6b0f0f','du titanium':'#00573F',
 };
 function getBankColor(n) {
   const l=(n||'').toLowerCase();
@@ -115,7 +115,6 @@ function LoginPage({ onLogin, logo }) {
               {loading ? '⏳ Signing in...' : '→ Sign In'}
             </button>
           </form>
-          <div className="login-hint">Demo: admin / ceo2024</div>
         </div>
       </div>
     </div>
@@ -245,7 +244,7 @@ function CardModal({ card, onClose, onSave }) {
       onSave();
     }catch(err){alert('Error: '+err.message);}finally{setSaving(false);}
   };
-  const banks=['Emirates NBD','ADCB','FAB','Mashreq','HSBC','Standard Chartered','Citibank','RAK Bank','DIB','Other'];
+  const banks=['Emirates NBD','ADCB','FAB','Mashreq','HSBC','EI Flex','Emirates Islamic','RAK Bank','DU Titanium','Other'];
   return(
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e=>e.stopPropagation()}>
