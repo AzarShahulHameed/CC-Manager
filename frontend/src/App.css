@@ -663,3 +663,77 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); colo
   object-fit: contain;
   display: block;
 }
+
+/* ── Transaction Filter Bar ─────────────────────────────────── */
+.txn-filter-bar {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1.5px solid var(--border);
+}
+
+.txn-filter-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.txn-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.txn-filter-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: var(--text-muted);
+}
+
+.txn-filter-select {
+  background: var(--bg-3);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 12px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color .15s;
+  min-width: 180px;
+}
+
+.txn-filter-select:focus {
+  border-color: var(--accent);
+  background: #fff;
+}
+
+.txn-filter-date {
+  background: var(--bg-3);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 12px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color .15s;
+  width: 148px;
+}
+
+.txn-filter-date:focus {
+  border-color: var(--accent);
+  background: #fff;
+}
+
+/* Mobile responsive for filter bar */
+@media (max-width: 768px) {
+  .txn-filter-row { flex-direction: column; align-items: stretch; }
+  .txn-filter-select, .txn-filter-date { width: 100%; }
+}
