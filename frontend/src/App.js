@@ -115,7 +115,6 @@ function LoginPage({ onLogin, logo }) {
               {loading ? '⏳ Signing in...' : '→ Sign In'}
             </button>
           </form>
-          <div className="login-hint"></div>
         </div>
       </div>
     </div>
@@ -305,11 +304,13 @@ function CardModal({ card, onClose, onSave }) {
 
 // ─── Transaction Modal ────────────────────────────────────────
 function TransactionModal({ cards, onClose, onSave }) {
+  const todayDate = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({
     card_id: '',
     amount: '',
     description: '',
-    type: 'charge'
+    type: 'charge',
+    transaction_date: todayDate
   });
 
   const handleSubmit = async (e) => {
@@ -317,10 +318,11 @@ function TransactionModal({ cards, onClose, onSave }) {
 
     try {
       const payload = {
-        card_id: Number(form.card_id),        // ✅ convert to number
-        amount: Number(form.amount),          // ✅ convert to number
+        card_id: Number(form.card_id),
+        amount: Number(form.amount),
         description: form.description,
-        type: form.type
+        type: form.type,
+        transaction_date: form.transaction_date
       };
 
       const res = await fetch(`${API}/transactions`, {
@@ -389,6 +391,18 @@ function TransactionModal({ cards, onClose, onSave }) {
             <input
               value={form.description}
               onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+              placeholder="e.g. Hotel, Flight, Dinner"
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Transaction Date</label>
+            <input
+              type="date"
+              value={form.transaction_date}
+              max={new Date().toISOString().slice(0,10)}
+              onChange={e => setForm(f => ({ ...f, transaction_date: e.target.value }))}
+              required
             />
           </div>
 
@@ -554,9 +568,6 @@ export default function App() {
   const [selectedCard,setSelectedCard]=useState(null);
   const [loading,setLoading]=useState(true);
   const [txnFilter,setTxnFilter]=useState('all');
-  const [txnCardFilter,setTxnCardFilter]=useState('all');
-  const [txnDateFrom,setTxnDateFrom]=useState('');
-  const [txnDateTo,setTxnDateTo]=useState('');
   const [toastMsg,setToastMsg]=useState('');
   const logoInput=useRef();
 
@@ -611,27 +622,7 @@ export default function App() {
   );
 
   const cards=dashboard?.cards||[];
-  const filteredTxns = transactions.filter(t => {
-    // Type filter
-    if (txnFilter !== 'all' && t.type !== txnFilter) return false;
-    // Card filter
-    if (txnCardFilter !== 'all' && String(t.card_id) !== String(txnCardFilter)) return false;
-    // Date from filter
-    if (txnDateFrom) {
-      const txDate = new Date(t.transaction_date);
-      const from   = new Date(txnDateFrom);
-      from.setHours(0,0,0,0);
-      if (txDate < from) return false;
-    }
-    // Date to filter
-    if (txnDateTo) {
-      const txDate = new Date(t.transaction_date);
-      const to     = new Date(txnDateTo);
-      to.setHours(23,59,59,999);
-      if (txDate > to) return false;
-    }
-    return true;
-  });
+  const filteredTxns=txnFilter==='all'?transactions:transactions.filter(t=>t.type===txnFilter);
 
   return(
     <div className="app">
@@ -851,81 +842,15 @@ export default function App() {
         {activeTab==='transactions'&&(
           <div className="content">
             <div className="section">
-              {/* ── Filter Bar ── */}
-              <div className="txn-filter-bar">
-                {/* Row 1: Type filters + Add button */}
-                <div className="txn-filter-row">
-                  <div className="txn-filter-group">
-                    <span className="txn-filter-label">Type</span>
-                    <div style={{display:'flex',gap:'6px'}}>
-                      {['all','charge','payment','adjustment'].map(f=>(
-                        <button key={f} className={`filter-btn ${txnFilter===f?'active':''}`} onClick={()=>setTxnFilter(f)}>
-                          {f==='all'?'All Types':f.charAt(0).toUpperCase()+f.slice(1)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <button className="btn btn-primary btn-sm" onClick={()=>setShowTxnModal(true)}>+ Add Transaction</button>
+              <div className="section-header" style={{marginBottom:'20px'}}>
+                <div style={{display:'flex',gap:'8px'}}>
+                  {['all','charge','payment','adjustment'].map(f=>(
+                    <button key={f} className={`filter-btn ${txnFilter===f?'active':''}`} onClick={()=>setTxnFilter(f)}>
+                      {f.charAt(0).toUpperCase()+f.slice(1)}
+                    </button>
+                  ))}
                 </div>
-
-                {/* Row 2: Card filter + Date range */}
-                <div className="txn-filter-row" style={{marginTop:'12px',flexWrap:'wrap',gap:'12px'}}>
-                  {/* Card filter */}
-                  <div className="txn-filter-group">
-                    <span className="txn-filter-label">Card</span>
-                    <select
-                      className="txn-filter-select"
-                      value={txnCardFilter}
-                      onChange={e=>setTxnCardFilter(e.target.value)}
-                    >
-                      <option value="all">All Cards</option>
-                      {cards.map(c=>(
-                        <option key={c.id} value={c.id}>
-                          {c.bank_name} ****{c.card_number.slice(-4)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Date From */}
-                  <div className="txn-filter-group">
-                    <span className="txn-filter-label">From Date</span>
-                    <input
-                      type="date"
-                      className="txn-filter-date"
-                      value={txnDateFrom}
-                      max={txnDateTo||undefined}
-                      onChange={e=>setTxnDateFrom(e.target.value)}
-                    />
-                  </div>
-
-                  {/* Date To */}
-                  <div className="txn-filter-group">
-                    <span className="txn-filter-label">To Date</span>
-                    <input
-                      type="date"
-                      className="txn-filter-date"
-                      value={txnDateTo}
-                      min={txnDateFrom||undefined}
-                      onChange={e=>setTxnDateTo(e.target.value)}
-                    />
-                  </div>
-
-                  {/* Clear filters */}
-                  {(txnCardFilter!=='all'||txnDateFrom||txnDateTo||txnFilter!=='all')&&(
-                    <div className="txn-filter-group" style={{justifyContent:'flex-end'}}>
-                      <span className="txn-filter-label">&nbsp;</span>
-                      <button className="btn btn-ghost btn-sm" onClick={()=>{setTxnFilter('all');setTxnCardFilter('all');setTxnDateFrom('');setTxnDateTo('');}}>
-                        ✕ Clear Filters
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Results count */}
-                  <div style={{marginLeft:'auto',alignSelf:'flex-end',fontSize:'12px',color:'var(--text-muted)',paddingBottom:'2px'}}>
-                    {filteredTxns.length} of {transactions.length} transactions
-                  </div>
-                </div>
+                <button className="btn btn-primary btn-sm" onClick={()=>setShowTxnModal(true)}>+ Add</button>
               </div>
               <div className="txn-table-wrap">
                 <table className="txn-table">
