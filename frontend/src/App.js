@@ -4,7 +4,7 @@ import './App.css';
 const API = 'https://cc-manager-8sgi.onrender.com/api';
 
 // ─── Demo credentials (replace with real auth backend) ───────
-const DEMO_USER = { username: 'Admin Catapult', password: 'cat@2026', name: 'Saraswathy N', role: 'HR Manager' };
+const DEMO_USER = { username: 'admin', password: 'ceo2024', name: 'CEO', role: 'Executive' };
 
 // ─── Utilities ───────────────────────────────────────────────
 function maskCard(num) {
@@ -54,7 +54,7 @@ function LoginPage({ onLogin, logo }) {
     if (form.username === DEMO_USER.username && form.password === DEMO_USER.password) {
       onLogin(DEMO_USER);
     } else {
-      setError('Invalid username or password');
+      setError('Invalid username or password. Try admin / ceo2024');
     }
     setLoading(false);
   };
@@ -115,6 +115,7 @@ function LoginPage({ onLogin, logo }) {
               {loading ? '⏳ Signing in...' : '→ Sign In'}
             </button>
           </form>
+          <div className="login-hint">Demo: admin / ceo2024</div>
         </div>
       </div>
     </div>
@@ -568,6 +569,9 @@ export default function App() {
   const [selectedCard,setSelectedCard]=useState(null);
   const [loading,setLoading]=useState(true);
   const [txnFilter,setTxnFilter]=useState('all');
+  const [txnCardFilter,setTxnCardFilter]=useState('all');
+  const [txnDateFrom,setTxnDateFrom]=useState('');
+  const [txnDateTo,setTxnDateTo]=useState('');
   const [toastMsg,setToastMsg]=useState('');
   const logoInput=useRef();
 
@@ -622,7 +626,19 @@ export default function App() {
   );
 
   const cards=dashboard?.cards||[];
-  const filteredTxns=txnFilter==='all'?transactions:transactions.filter(t=>t.type===txnFilter);
+  const filteredTxns = transactions.filter(t => {
+    if (txnFilter !== 'all' && t.type !== txnFilter) return false;
+    if (txnCardFilter !== 'all' && String(t.card_id) !== String(txnCardFilter)) return false;
+    if (txnDateFrom) {
+      const from = new Date(txnDateFrom); from.setHours(0,0,0,0);
+      if (new Date(t.transaction_date) < from) return false;
+    }
+    if (txnDateTo) {
+      const to = new Date(txnDateTo); to.setHours(23,59,59,999);
+      if (new Date(t.transaction_date) > to) return false;
+    }
+    return true;
+  });
 
   return(
     <div className="app">
@@ -842,15 +858,80 @@ export default function App() {
         {activeTab==='transactions'&&(
           <div className="content">
             <div className="section">
-              <div className="section-header" style={{marginBottom:'20px'}}>
-                <div style={{display:'flex',gap:'8px'}}>
-                  {['all','charge','payment','adjustment'].map(f=>(
-                    <button key={f} className={`filter-btn ${txnFilter===f?'active':''}`} onClick={()=>setTxnFilter(f)}>
-                      {f.charAt(0).toUpperCase()+f.slice(1)}
-                    </button>
-                  ))}
+              {/* ── Filter Bar ── */}
+              <div style={{marginBottom:'20px'}}>
+                {/* Row 1: Type filters + Add button */}
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'8px',flexWrap:'wrap',marginBottom:'12px'}}>
+                  <div style={{display:'flex',gap:'6px',flexWrap:'wrap',alignItems:'center'}}>
+                    <span style={{fontSize:'10px',fontWeight:700,textTransform:'uppercase',letterSpacing:'.6px',color:'var(--text-muted)',marginRight:'4px'}}>Type</span>
+                    {['all','charge','payment','adjustment'].map(f=>(
+                      <button key={f} className={`filter-btn ${txnFilter===f?'active':''}`} onClick={()=>setTxnFilter(f)}>
+                        {f==='all'?'All Types':f.charAt(0).toUpperCase()+f.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                  <button className="btn btn-primary btn-sm" onClick={()=>setShowTxnModal(true)}>+ Add Transaction</button>
                 </div>
-                <button className="btn btn-primary btn-sm" onClick={()=>setShowTxnModal(true)}>+ Add</button>
+
+                {/* Row 2: Card + Date filters */}
+                <div style={{display:'flex',alignItems:'flex-end',gap:'12px',flexWrap:'wrap'}}>
+                  {/* Card filter */}
+                  <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
+                    <span style={{fontSize:'10px',fontWeight:700,textTransform:'uppercase',letterSpacing:'.6px',color:'var(--text-muted)'}}>Card</span>
+                    <select
+                      value={txnCardFilter}
+                      onChange={e=>setTxnCardFilter(e.target.value)}
+                      className="txn-filter-select"
+                    >
+                      <option value="all">All Cards</option>
+                      {cards.map(c=>(
+                        <option key={c.id} value={c.id}>
+                          {c.bank_name} ****{c.card_number.slice(-4)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Date From */}
+                  <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
+                    <span style={{fontSize:'10px',fontWeight:700,textTransform:'uppercase',letterSpacing:'.6px',color:'var(--text-muted)'}}>From Date</span>
+                    <input
+                      type="date"
+                      value={txnDateFrom}
+                      max={txnDateTo||undefined}
+                      onChange={e=>setTxnDateFrom(e.target.value)}
+                      className="txn-filter-date"
+                    />
+                  </div>
+
+                  {/* Date To */}
+                  <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
+                    <span style={{fontSize:'10px',fontWeight:700,textTransform:'uppercase',letterSpacing:'.6px',color:'var(--text-muted)'}}>To Date</span>
+                    <input
+                      type="date"
+                      value={txnDateTo}
+                      min={txnDateFrom||undefined}
+                      onChange={e=>setTxnDateTo(e.target.value)}
+                      className="txn-filter-date"
+                    />
+                  </div>
+
+                  {/* Clear button — only shows when any filter is active */}
+                  {(txnCardFilter!=='all'||txnDateFrom||txnDateTo||txnFilter!=='all')&&(
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      style={{marginBottom:'1px'}}
+                      onClick={()=>{setTxnFilter('all');setTxnCardFilter('all');setTxnDateFrom('');setTxnDateTo('');}}
+                    >
+                      ✕ Clear
+                    </button>
+                  )}
+
+                  {/* Results count */}
+                  <div style={{marginLeft:'auto',fontSize:'12px',color:'var(--text-muted)',paddingBottom:'4px'}}>
+                    {filteredTxns.length} of {transactions.length} transactions
+                  </div>
+                </div>
               </div>
               <div className="txn-table-wrap">
                 <table className="txn-table">
