@@ -115,7 +115,6 @@ function LoginPage({ onLogin, logo }) {
               {loading ? '⏳ Signing in...' : '→ Sign In'}
             </button>
           </form>
-          <div className="login-hint"></div>
         </div>
       </div>
     </div>
@@ -305,13 +304,11 @@ function CardModal({ card, onClose, onSave }) {
 
 // ─── Transaction Modal ────────────────────────────────────────
 function TransactionModal({ cards, onClose, onSave }) {
-  const todayDate = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({
     card_id: '',
     amount: '',
     description: '',
-    type: 'charge',
-    transaction_date: todayDate
+    type: 'charge'
   });
 
   const handleSubmit = async (e) => {
@@ -319,11 +316,10 @@ function TransactionModal({ cards, onClose, onSave }) {
 
     try {
       const payload = {
-        card_id: Number(form.card_id),
-        amount: Number(form.amount),
+        card_id: Number(form.card_id),        // ✅ convert to number
+        amount: Number(form.amount),          // ✅ convert to number
         description: form.description,
-        type: form.type,
-        transaction_date: form.transaction_date
+        type: form.type
       };
 
       const res = await fetch(`${API}/transactions`, {
@@ -392,18 +388,6 @@ function TransactionModal({ cards, onClose, onSave }) {
             <input
               value={form.description}
               onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-              placeholder="e.g. Hotel, Flight, Dinner"
-            />
-          </div>
-
-          <div className="form-group">
-            <label>Transaction Date</label>
-            <input
-              type="date"
-              value={form.transaction_date}
-              max={new Date().toISOString().slice(0,10)}
-              onChange={e => setForm(f => ({ ...f, transaction_date: e.target.value }))}
-              required
             />
           </div>
 
@@ -418,6 +402,107 @@ function TransactionModal({ cards, onClose, onSave }) {
         </form>
       </div>
     </div>
+  );
+}
+
+
+// ─── Inline Transaction Edit Row ─────────────────────────────
+function InlineTxnEdit({ txn, cards, onSave, onCancel }) {
+  const [form, setForm] = useState({
+    amount:           txn.amount,
+    description:      txn.description || '',
+    type:             txn.type,
+    card_id:          txn.card_id,
+    transaction_date: txn.transaction_date
+      ? new Date(txn.transaction_date).toISOString().slice(0,10)
+      : new Date().toISOString().slice(0,10)
+  });
+
+  const handleSave = async () => {
+    try {
+      const res = await fetch(`${API}/transactions/${txn.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...form,
+          amount: parseFloat(form.amount),
+          card_id: Number(form.card_id)
+        })
+      });
+      if (!res.ok) throw new Error('Update failed');
+      onSave();
+    } catch (err) { alert('Error: ' + err.message); }
+  };
+
+  return (
+    <tr className="txn-edit-row">
+      <td>
+        <input
+          type="date"
+          value={form.transaction_date}
+          max={new Date().toISOString().slice(0,10)}
+          onChange={e => setForm(f=>({...f, transaction_date: e.target.value}))}
+          className="txn-inline-input"
+          style={{width:'130px'}}
+        />
+      </td>
+      <td>
+        <select
+          value={form.card_id}
+          onChange={e => setForm(f=>({...f, card_id: e.target.value}))}
+          className="txn-inline-input"
+        >
+          {cards.map(c=>(
+            <option key={c.id} value={c.id}>
+              {c.bank_name} ****{c.card_number.slice(-4)}
+            </option>
+          ))}
+        </select>
+      </td>
+      <td>
+        <input
+          value={form.description}
+          onChange={e => setForm(f=>({...f, description: e.target.value}))}
+          className="txn-inline-input"
+          placeholder="Description"
+          style={{width:'140px'}}
+        />
+      </td>
+      <td>
+        <select
+          value={form.type}
+          onChange={e => setForm(f=>({...f, type: e.target.value}))}
+          className="txn-inline-input"
+        >
+          <option value="charge">Charge</option>
+          <option value="payment">Payment</option>
+          <option value="adjustment">Adjustment</option>
+        </select>
+      </td>
+      <td style={{textAlign:'right'}}>
+        <input
+          type="number"
+          value={form.amount}
+          onChange={e => setForm(f=>({...f, amount: e.target.value}))}
+          className="txn-inline-input"
+          style={{width:'100px', textAlign:'right'}}
+        />
+      </td>
+      <td style={{textAlign:'center', whiteSpace:'nowrap'}}>
+        {/* ✅ Save */}
+        <button
+          onClick={handleSave}
+          title="Save"
+          style={{background:'none',border:'none',cursor:'pointer',fontSize:'18px',color:'#10b981',padding:'2px 5px'}}
+        >✅</button>
+        {/* ✕ Cancel */}
+        <button
+          onClick={onCancel}
+          title="Cancel"
+          style={{background:'none',border:'none',cursor:'pointer',fontSize:'18px',color:'#94a3b8',padding:'2px 5px'}}
+        >✕</button>
+      </td>
+    </tr>
   );
 }
 
@@ -569,9 +654,7 @@ export default function App() {
   const [selectedCard,setSelectedCard]=useState(null);
   const [loading,setLoading]=useState(true);
   const [txnFilter,setTxnFilter]=useState('all');
-  const [txnCardFilter,setTxnCardFilter]=useState('all');
-  const [txnDateFrom,setTxnDateFrom]=useState('');
-  const [txnDateTo,setTxnDateTo]=useState('');
+  const [editingTxnId,setEditingTxnId]=useState(null);
   const [toastMsg,setToastMsg]=useState('');
   const logoInput=useRef();
 
@@ -604,6 +687,14 @@ export default function App() {
 
   useEffect(()=>{ if(user) loadDashboard(); },[user,loadDashboard]);
 
+  const handleDeleteTxn=async id=>{
+    if(!window.confirm('Delete this transaction?')) return;
+    try {
+      await fetch(`${API}/transactions/${id}`,{method:'DELETE'});
+      loadDashboard(); toast('Transaction deleted.');
+    } catch(err){ toast('❌ Delete failed'); }
+  };
+
   const handleDeleteCard=async id=>{
     if(!window.confirm('Delete this card and all its data?')) return;
     await fetch(`${API}/cards/${id}`,{method:'DELETE'});
@@ -626,19 +717,7 @@ export default function App() {
   );
 
   const cards=dashboard?.cards||[];
-  const filteredTxns = transactions.filter(t => {
-    if (txnFilter !== 'all' && t.type !== txnFilter) return false;
-    if (txnCardFilter !== 'all' && String(t.card_id) !== String(txnCardFilter)) return false;
-    if (txnDateFrom) {
-      const from = new Date(txnDateFrom); from.setHours(0,0,0,0);
-      if (new Date(t.transaction_date) < from) return false;
-    }
-    if (txnDateTo) {
-      const to = new Date(txnDateTo); to.setHours(23,59,59,999);
-      if (new Date(t.transaction_date) > to) return false;
-    }
-    return true;
-  });
+  const filteredTxns=txnFilter==='all'?transactions:transactions.filter(t=>t.type===txnFilter);
 
   return(
     <div className="app">
@@ -858,96 +937,57 @@ export default function App() {
         {activeTab==='transactions'&&(
           <div className="content">
             <div className="section">
-              {/* ── Filter Bar ── */}
-              <div style={{marginBottom:'20px'}}>
-                {/* Row 1: Type filters + Add button */}
-                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'8px',flexWrap:'wrap',marginBottom:'12px'}}>
-                  <div style={{display:'flex',gap:'6px',flexWrap:'wrap',alignItems:'center'}}>
-                    <span style={{fontSize:'10px',fontWeight:700,textTransform:'uppercase',letterSpacing:'.6px',color:'var(--text-muted)',marginRight:'4px'}}>Type</span>
-                    {['all','charge','payment','adjustment'].map(f=>(
-                      <button key={f} className={`filter-btn ${txnFilter===f?'active':''}`} onClick={()=>setTxnFilter(f)}>
-                        {f==='all'?'All Types':f.charAt(0).toUpperCase()+f.slice(1)}
-                      </button>
-                    ))}
-                  </div>
-                  <button className="btn btn-primary btn-sm" onClick={()=>setShowTxnModal(true)}>+ Add Transaction</button>
-                </div>
-
-                {/* Row 2: Card + Date filters */}
-                <div style={{display:'flex',alignItems:'flex-end',gap:'12px',flexWrap:'wrap'}}>
-                  {/* Card filter */}
-                  <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
-                    <span style={{fontSize:'10px',fontWeight:700,textTransform:'uppercase',letterSpacing:'.6px',color:'var(--text-muted)'}}>Card</span>
-                    <select
-                      value={txnCardFilter}
-                      onChange={e=>setTxnCardFilter(e.target.value)}
-                      className="txn-filter-select"
-                    >
-                      <option value="all">All Cards</option>
-                      {cards.map(c=>(
-                        <option key={c.id} value={c.id}>
-                          {c.bank_name} ****{c.card_number.slice(-4)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Date From */}
-                  <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
-                    <span style={{fontSize:'10px',fontWeight:700,textTransform:'uppercase',letterSpacing:'.6px',color:'var(--text-muted)'}}>From Date</span>
-                    <input
-                      type="date"
-                      value={txnDateFrom}
-                      max={txnDateTo||undefined}
-                      onChange={e=>setTxnDateFrom(e.target.value)}
-                      className="txn-filter-date"
-                    />
-                  </div>
-
-                  {/* Date To */}
-                  <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
-                    <span style={{fontSize:'10px',fontWeight:700,textTransform:'uppercase',letterSpacing:'.6px',color:'var(--text-muted)'}}>To Date</span>
-                    <input
-                      type="date"
-                      value={txnDateTo}
-                      min={txnDateFrom||undefined}
-                      onChange={e=>setTxnDateTo(e.target.value)}
-                      className="txn-filter-date"
-                    />
-                  </div>
-
-                  {/* Clear button — only shows when any filter is active */}
-                  {(txnCardFilter!=='all'||txnDateFrom||txnDateTo||txnFilter!=='all')&&(
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      style={{marginBottom:'1px'}}
-                      onClick={()=>{setTxnFilter('all');setTxnCardFilter('all');setTxnDateFrom('');setTxnDateTo('');}}
-                    >
-                      ✕ Clear
+              <div className="section-header" style={{marginBottom:'20px'}}>
+                <div style={{display:'flex',gap:'8px'}}>
+                  {['all','charge','payment','adjustment'].map(f=>(
+                    <button key={f} className={`filter-btn ${txnFilter===f?'active':''}`} onClick={()=>setTxnFilter(f)}>
+                      {f.charAt(0).toUpperCase()+f.slice(1)}
                     </button>
-                  )}
-
-                  {/* Results count */}
-                  <div style={{marginLeft:'auto',fontSize:'12px',color:'var(--text-muted)',paddingBottom:'4px'}}>
-                    {filteredTxns.length} of {transactions.length} transactions
-                  </div>
+                  ))}
                 </div>
+                <button className="btn btn-primary btn-sm" onClick={()=>setShowTxnModal(true)}>+ Add</button>
               </div>
               <div className="txn-table-wrap">
                 <table className="txn-table">
-                  <thead><tr><th>Date</th><th>Card</th><th>Description</th><th>Type</th><th style={{textAlign:'right'}}>Amount</th></tr></thead>
+                  <thead><tr><th>Date</th><th>Card</th><th>Description</th><th>Type</th><th style={{textAlign:'right'}}>Amount</th><th style={{textAlign:'center',width:'70px'}}></th></tr></thead>
                   <tbody>
                     {filteredTxns.map(txn=>(
-                      <tr key={txn.id}>
-                        <td>{new Date(txn.transaction_date).toLocaleDateString('en-AE')}</td>
-                        <td>
-                          <span className="bank-pill" style={{background:`${getBankColor(txn.bank_name)}15`,color:getBankColor(txn.bank_name)}}>{txn.bank_name}</span>
-                          <span style={{color:'var(--text-faint)',marginLeft:'6px',fontSize:'12px'}}>****{txn.card_number?.slice(-4)}</span>
-                        </td>
-                        <td>{txn.description||'—'}</td>
-                        <td><span className={`type-badge ${txn.type}`}>{txn.type}</span></td>
-                        <td style={{textAlign:'right'}}><span className={txn.type==='payment'?'credit':'debit'}>{txn.type==='payment'?'−':'+'}{fmtCurrency(txn.amount)}</span></td>
-                      </tr>
+                      editingTxnId===txn.id
+                        ? <InlineTxnEdit
+                            key={txn.id}
+                            txn={txn}
+                            cards={cards}
+                            onSave={()=>{ setEditingTxnId(null); loadDashboard(); toast('✅ Transaction updated!'); }}
+                            onCancel={()=>setEditingTxnId(null)}
+                          />
+                        : <tr key={txn.id} className="txn-table-row">
+                            <td>{new Date(txn.transaction_date).toLocaleDateString('en-AE')}</td>
+                            <td>
+                              <span className="bank-pill" style={{background:`${getBankColor(txn.bank_name)}15`,color:getBankColor(txn.bank_name)}}>{txn.bank_name}</span>
+                              <span style={{color:'var(--text-faint)',marginLeft:'6px',fontSize:'12px'}}>****{txn.card_number?.slice(-4)}</span>
+                            </td>
+                            <td>{txn.description||'—'}</td>
+                            <td><span className={`type-badge ${txn.type}`}>{txn.type}</span></td>
+                            <td style={{textAlign:'right'}}><span className={txn.type==='payment'?'credit':'debit'}>{txn.type==='payment'?'−':'+'}{fmtCurrency(txn.amount)}</span></td>
+                            <td style={{textAlign:'center',whiteSpace:'nowrap'}}>
+                              {/* ✏️ Edit */}
+                              <button
+                                onClick={()=>setEditingTxnId(txn.id)}
+                                title="Edit transaction"
+                                style={{background:'none',border:'none',cursor:'pointer',fontSize:'15px',padding:'3px 5px',color:'#64748b',borderRadius:'6px',transition:'all .15s'}}
+                                onMouseEnter={e=>e.target.style.color='#4361ee'}
+                                onMouseLeave={e=>e.target.style.color='#64748b'}
+                              >✏️</button>
+                              {/* 🗑 Delete */}
+                              <button
+                                onClick={()=>handleDeleteTxn(txn.id)}
+                                title="Delete transaction"
+                                style={{background:'none',border:'none',cursor:'pointer',fontSize:'15px',padding:'3px 5px',color:'#64748b',borderRadius:'6px',transition:'all .15s'}}
+                                onMouseEnter={e=>e.target.style.color='#f43f5e'}
+                                onMouseLeave={e=>e.target.style.color='#64748b'}
+                              >🗑️</button>
+                            </td>
+                          </tr>
                     ))}
                   </tbody>
                 </table>
