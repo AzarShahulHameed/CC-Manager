@@ -663,12 +663,40 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); colo
   object-fit: contain;
   display: block;
 }
-/* ── Inline Transaction Edit ────────────────────────────────── */
-.txn-edit-row td {
-  background: var(--accent-light) !important;
-  padding: 8px 14px !important;
+/* ── Transaction Filters ─────────────────────────────────────── */
+.txn-filter-select {
+  background: var(--bg-3);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 12px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color .15s;
+  min-width: 185px;
 }
+.txn-filter-select:focus { border-color: var(--accent); background: #fff; }
 
+.txn-filter-date {
+  background: var(--bg-3);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 12px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color .15s;
+  width: 148px;
+}
+.txn-filter-date:focus { border-color: var(--accent); background: #fff; }
+
+/* ── Inline Transaction Edit ──────────────────────────────────── */
 .txn-inline-input {
   background: #fff;
   border: 1.5px solid var(--accent);
@@ -680,20 +708,13 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); colo
   outline: none;
   width: 100%;
 }
+.txn-inline-input:focus { box-shadow: 0 0 0 2px rgba(67,97,238,.15); }
 
-.txn-inline-input:focus {
-  box-shadow: 0 0 0 2px rgba(67,97,238,.15);
-}
+/* Edit/Delete icons — visible only on row hover */
+.txn-table-row td:last-child { opacity: 0; transition: opacity .15s; }
+.txn-table-row:hover td:last-child { opacity: 1; }
+.txn-table-row:hover td { background: var(--bg-3); }
 
-.txn-table-row:hover td {
-  background: var(--bg-3);
-}
-
-/* Action column always visible but subtle */
-.txn-table-row td:last-child {
-  opacity: 0;
-  transition: opacity .15s;
-}
-.txn-table-row:hover td:last-child {
-  opacity: 1;
+@media (max-width: 768px) {
+  .txn-filter-select, .txn-filter-date { width: 100%; min-width: unset; }
 }
