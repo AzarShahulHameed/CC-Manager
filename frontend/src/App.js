@@ -304,11 +304,13 @@ function CardModal({ card, onClose, onSave }) {
 
 // ─── Transaction Modal ────────────────────────────────────────
 function TransactionModal({ cards, onClose, onSave }) {
+  const today = new Date().toISOString().slice(0,10);
   const [form, setForm] = useState({
     card_id: '',
     amount: '',
     description: '',
-    type: 'charge'
+    type: 'charge',
+    transaction_date: today   // NEW: defaults to today, editable
   });
 
   const handleSubmit = async (e) => {
@@ -319,7 +321,8 @@ function TransactionModal({ cards, onClose, onSave }) {
         card_id: Number(form.card_id),        // ✅ convert to number
         amount: Number(form.amount),          // ✅ convert to number
         description: form.description,
-        type: form.type
+        type: form.type,
+        transaction_date: form.transaction_date   // NEW: send chosen date
       };
 
       const res = await fetch(`${API}/transactions`, {
@@ -345,6 +348,17 @@ function TransactionModal({ cards, onClose, onSave }) {
         </div>
 
         <form onSubmit={handleSubmit} className="card-form">
+          <div className="form-group">
+            <label>Date</label>
+            <input
+              type="date"
+              value={form.transaction_date}
+              max={today}
+              onChange={e => setForm(f => ({ ...f, transaction_date: e.target.value }))}
+              required
+            />
+          </div>
+
           <div className="form-group">
             <label>Card</label>
             <select
