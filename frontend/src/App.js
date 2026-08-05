@@ -249,7 +249,7 @@ function InlineBalance({ card, onUpdated }) {
   );
   return(
     <span className="editable-balance" onClick={()=>{setVal(card.outstanding_balance);setEditing(true);}} title="Click to edit">
-      {fmt(card.outstanding_balance)}<span className="edit-icon">✎</span>
+      {fmtCurrency(card.outstanding_balance)}<span className="edit-icon">✎</span>
     </span>
   );
 }
@@ -570,11 +570,11 @@ function RecommendModal({ onClose }) {
                           {noneAffordable && <span className="advisor-tag" style={{background:'#fef3c7',color:'#b45309'}}>HIGHEST AVAILABLE</span>}
                           {card.daysToBilling<=2&&card.canAfford && <span className="advisor-tag" style={{background:'#fef3c7',color:'#b45309'}}>⚠️ BILLING CLOSES SOON</span>}
                         </div>
-                        <div className="rec-recommendation">{noneAffordable ? `Available: ${fmt(card.available)} — closest to your required amount` : card.recommendation}</div>
+                        <div className="rec-recommendation">{noneAffordable ? `Available: ${fmtCurrency(card.available)} — closest to your required amount` : card.recommendation}</div>
                         <div className="rec-stats">
                           {[
-                            {label:'Available',val:fmt(card.available),color:card.canAfford?'#10b981':'#f59e0b'},
-                            {label:'Credit Limit',val:fmt(card.credit_limit),color:'inherit'},
+                            {label:'Available',val:fmtCurrency(card.available),color:card.canAfford?'#10b981':'#f59e0b'},
+                            {label:'Credit Limit',val:fmtCurrency(card.credit_limit),color:'inherit'},
                             {label:'Days to Billing',val:`${card.daysToBilling}d`,color:urgencyColor(card.daysToBilling)},
                             {label:'Days to Due',val:`${card.daysToDue}d`,color:urgencyColor(card.daysToDue)},
                             {label:'Interest-Free',val:`${card.daysToBilling+card.daysToDue}d`,color:'#4361ee'},
@@ -625,7 +625,7 @@ export default function App() {
   const [countryKey, setCountry] = useState(localStorage.getItem('cc_country')||'UAE');
   const country = COUNTRIES[countryKey] || COUNTRIES.UAE;
   const switchCountry = (key) => { setCountryKey(key); setCountry(key); };
-  const fmt = (val) => fmt(val, countryKey);
+  const fmt = (val) => fmtCurrency(val, countryKey);
   const [dashboard,setDashboard]=useState(null);
   const [transactions,setTransactions]=useState([]);
   const [notifications,setNotifications]=useState([]);
