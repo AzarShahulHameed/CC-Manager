@@ -4,7 +4,7 @@ import './App.css';
 const API = 'https://cc-manager-8sgi.onrender.com/api';
 
 // ─── Demo credentials (replace with real auth backend) ───────
-const DEMO_USER = { username: 'admin', password: 'ceo2024', name: 'CEO', role: 'Executive' };
+const DEMO_USER = { username: 'Admin Catapult', password: 'cat@2026', name: 'Saraswathy N', role: 'HR Manager' };
 
 // ─── Country Config ──────────────────────────────────────────
 const COUNTRIES = {
@@ -78,7 +78,7 @@ function LoginPage({ onLogin, logo }) {
     if (form.username === DEMO_USER.username && form.password === DEMO_USER.password) {
       onLogin(DEMO_USER);
     } else {
-      setError('Invalid username or password. Try admin / ceo2024');
+      setError('Invalid username or password');
     }
     setLoading(false);
   };
@@ -139,7 +139,6 @@ function LoginPage({ onLogin, logo }) {
               {loading ? '⏳ Signing in...' : '→ Sign In'}
             </button>
           </form>
-          <div className="login-hint">Demo: admin / ceo2024</div>
         </div>
       </div>
     </div>
