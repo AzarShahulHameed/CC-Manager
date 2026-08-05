@@ -623,7 +623,6 @@ export default function App() {
   });
   const [logo, setLogo] = useState(localStorage.getItem('cc_logo')||null);
   const [countryKey, setCountry] = useState(localStorage.getItem('cc_country')||'UAE');
-  const country = COUNTRIES[countryKey] || COUNTRIES.UAE;
   const switchCountry = (key) => { setCountryKey(key); setCountry(key); };
   const fmt = (val) => fmtCurrency(val, countryKey);
   const [dashboard,setDashboard]=useState(null);
