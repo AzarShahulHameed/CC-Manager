@@ -4,7 +4,30 @@ import './App.css';
 const API = 'https://cc-manager-8sgi.onrender.com/api';
 
 // ─── Demo credentials (replace with real auth backend) ───────
-const DEMO_USER = { username: 'Admin Catapult', password: 'cat@2026', name: 'Saraswathy N', role: 'HR Manager' };
+const DEMO_USER = { username: 'admin', password: 'ceo2024', name: 'CEO', role: 'Executive' };
+
+// ─── Country Config ──────────────────────────────────────────
+const COUNTRIES = {
+  UAE: {
+    label: '🇦🇪 UAE',
+    currency: 'AED',
+    locale: 'en-AE',
+    symbol: 'AED',
+    banks: ['Emirates NBD','ADCB','FAB','Mashreq','HSBC','Standard Chartered','Citibank','RAK Bank','DIB','Du Titanium','Emirates Islamic','Emirates Islamic - Flex','Other'],
+  },
+  India: {
+    label: '🇮🇳 India',
+    currency: 'INR',
+    locale: 'en-IN',
+    symbol: '₹',
+    banks: ['SBI','HDFC Bank','ICICI Bank','Axis Bank','Kotak Mahindra','IndusInd Bank','Yes Bank','HSBC India','Standard Chartered India','Citi India','Other'],
+  },
+};
+
+// Global country state (persisted to localStorage)
+let _country = localStorage.getItem('cc_country') || 'UAE';
+function getCountry() { return COUNTRIES[_country] || COUNTRIES.UAE; }
+function setCountryKey(key) { _country = key; localStorage.setItem('cc_country', key); }
 
 // ─── Utilities ───────────────────────────────────────────────
 function maskCard(num) {
@@ -12,8 +35,9 @@ function maskCard(num) {
   const c = num.replace(/\s/g, '');
   return `${c.slice(0,4)} •••• •••• ${c.slice(-4)}`;
 }
-function fmtCurrency(val) {
-  return new Intl.NumberFormat('en-AE', { style:'currency', currency:'AED', maximumFractionDigits:0 }).format(val||0);
+function fmtCurrency(val, countryKey) {
+  const cfg = COUNTRIES[countryKey || _country] || COUNTRIES.UAE;
+  return new Intl.NumberFormat(cfg.locale, { style:'currency', currency:cfg.currency, maximumFractionDigits:0 }).format(val||0);
 }
 function getDaysUntil(dayOfMonth, fromDate) {
   const ref = fromDate ? new Date(fromDate) : new Date();
@@ -54,7 +78,7 @@ function LoginPage({ onLogin, logo }) {
     if (form.username === DEMO_USER.username && form.password === DEMO_USER.password) {
       onLogin(DEMO_USER);
     } else {
-      setError('Invalid username or password');
+      setError('Invalid username or password. Try admin / ceo2024');
     }
     setLoading(false);
   };
@@ -115,6 +139,7 @@ function LoginPage({ onLogin, logo }) {
               {loading ? '⏳ Signing in...' : '→ Sign In'}
             </button>
           </form>
+          <div className="login-hint">Demo: admin / ceo2024</div>
         </div>
       </div>
     </div>
@@ -132,7 +157,7 @@ function BarChart({ data, keys, colors }) {
           <div key={i} className="bar-group">
             <div className="bars">
               {keys.map((k, ki) => (
-                <div key={k} className="bar-wrap" title={`${k}: AED ${(d[k]||0).toLocaleString()}`}>
+                <div key={k} className="bar-wrap" title={`${k}: ${getCountry().symbol} ${(d[k]||0).toLocaleString()}`}>
                   <div className="bar" style={{ height:`${((d[k]||0)/maxVal)*100}%`, background:colors[ki%colors.length] }} />
                 </div>
               ))}
@@ -218,14 +243,14 @@ function InlineBalance({ card, onUpdated }) {
   useEffect(()=>{if(editing&&ref.current)ref.current.focus();},[editing]);
   if(editing) return(
     <div className="inline-edit">
-      <span className="inline-currency">AED</span>
+      <span className="inline-currency">{getCountry().symbol}</span>
       <input ref={ref} type="number" value={val} onChange={e=>setVal(e.target.value)}
         onBlur={save} onKeyDown={e=>{if(e.key==='Enter')save();if(e.key==='Escape')setEditing(false);}} className="inline-input"/>
     </div>
   );
   return(
     <span className="editable-balance" onClick={()=>{setVal(card.outstanding_balance);setEditing(true);}} title="Click to edit">
-      {fmtCurrency(card.outstanding_balance)}<span className="edit-icon">✎</span>
+      {fmt(card.outstanding_balance)}<span className="edit-icon">✎</span>
     </span>
   );
 }
@@ -244,7 +269,7 @@ function CardModal({ card, onClose, onSave }) {
       onSave();
     }catch(err){alert('Error: '+err.message);}finally{setSaving(false);}
   };
-  const banks=['Emirates NBD','ADCB','FAB','Mashreq','HSBC','Standard Chartered','Citibank','RAK Bank','DIB','Other'];
+  const banks=getCountry().banks;
   return(
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e=>e.stopPropagation()}>
@@ -269,10 +294,10 @@ function CardModal({ card, onClose, onSave }) {
             <div className="form-group"><label>Card Holder Name</label>
               <input name="holder_name" value={form.holder_name} onChange={hc} placeholder="Full name" required/>
             </div>
-            <div className="form-group"><label>Credit Limit (AED)</label>
+            <div className="form-group"><label>Credit Limit ({getCountry().symbol})</label>
               <input name="credit_limit" type="number" value={form.credit_limit} onChange={hc} placeholder="50000" required/>
             </div>
-            <div className="form-group"><label>Outstanding Balance (AED)</label>
+            <div className="form-group"><label>Outstanding Balance ({getCountry().symbol})</label>
               <input name="outstanding_balance" type="number" value={form.outstanding_balance} onChange={hc} placeholder="0"/>
             </div>
             <div className="form-group"><label>Billing Date (1–31)</label>
@@ -304,13 +329,13 @@ function CardModal({ card, onClose, onSave }) {
 
 // ─── Transaction Modal ────────────────────────────────────────
 function TransactionModal({ cards, onClose, onSave }) {
-  const today = new Date().toISOString().slice(0,10);
+  const todayDate = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({
     card_id: '',
     amount: '',
     description: '',
     type: 'charge',
-    transaction_date: today   // NEW: defaults to today, editable
+    transaction_date: todayDate
   });
 
   const handleSubmit = async (e) => {
@@ -318,11 +343,11 @@ function TransactionModal({ cards, onClose, onSave }) {
 
     try {
       const payload = {
-        card_id: Number(form.card_id),        // ✅ convert to number
-        amount: Number(form.amount),          // ✅ convert to number
+        card_id: Number(form.card_id),
+        amount: Number(form.amount),
         description: form.description,
         type: form.type,
-        transaction_date: form.transaction_date   // NEW: send chosen date
+        transaction_date: form.transaction_date
       };
 
       const res = await fetch(`${API}/transactions`, {
@@ -348,17 +373,6 @@ function TransactionModal({ cards, onClose, onSave }) {
         </div>
 
         <form onSubmit={handleSubmit} className="card-form">
-          <div className="form-group">
-            <label>Date</label>
-            <input
-              type="date"
-              value={form.transaction_date}
-              max={today}
-              onChange={e => setForm(f => ({ ...f, transaction_date: e.target.value }))}
-              required
-            />
-          </div>
-
           <div className="form-group">
             <label>Card</label>
             <select
@@ -388,7 +402,7 @@ function TransactionModal({ cards, onClose, onSave }) {
           </div>
 
           <div className="form-group">
-            <label>Amount (AED)</label>
+            <label>Amount ({getCountry().symbol})</label>
             <input
               type="number"
               value={form.amount}
@@ -402,6 +416,18 @@ function TransactionModal({ cards, onClose, onSave }) {
             <input
               value={form.description}
               onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+              placeholder="e.g. Hotel, Flight, Dinner"
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Transaction Date</label>
+            <input
+              type="date"
+              value={form.transaction_date}
+              max={new Date().toISOString().slice(0,10)}
+              onChange={e => setForm(f => ({ ...f, transaction_date: e.target.value }))}
+              required
             />
           </div>
 
@@ -481,7 +507,7 @@ function RecommendModal({ onClose }) {
 
   const formatPayDate=(d)=>{
     if(!d) return '';
-    return new Date(d).toLocaleDateString('en-AE',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+    return new Date(d).toLocaleDateString(getCountry().locale,{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   };
 
   return(
@@ -497,7 +523,7 @@ function RecommendModal({ onClose }) {
 
         <div className="advisor-inputs">
           <div className="advisor-field">
-            <label>Payment Amount (AED)</label>
+            <label>Payment Amount ({getCountry().symbol})</label>
             <input type="number" value={amount} onChange={e=>setAmount(e.target.value)}
               onKeyDown={e=>e.key==='Enter'&&handleCheck()}
               placeholder="Enter amount" className="advisor-date-input" style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:'18px'}}/>
@@ -531,7 +557,7 @@ function RecommendModal({ onClose }) {
                 <>
                   {noneAffordable && (
                     <div className="advisor-no-afford">
-                      ⚠️ No card has enough limit for AED {Number(amount).toLocaleString()}. Showing the 3 cards with the highest available balance instead.
+                      ⚠️ No card has enough limit for {getCountry().symbol} {Number(amount).toLocaleString()}. Showing the 3 cards with the highest available balance instead.
                     </div>
                   )}
                   {showCards.map((card, i) => (
@@ -545,11 +571,11 @@ function RecommendModal({ onClose }) {
                           {noneAffordable && <span className="advisor-tag" style={{background:'#fef3c7',color:'#b45309'}}>HIGHEST AVAILABLE</span>}
                           {card.daysToBilling<=2&&card.canAfford && <span className="advisor-tag" style={{background:'#fef3c7',color:'#b45309'}}>⚠️ BILLING CLOSES SOON</span>}
                         </div>
-                        <div className="rec-recommendation">{noneAffordable ? `Available: ${fmtCurrency(card.available)} — closest to your required amount` : card.recommendation}</div>
+                        <div className="rec-recommendation">{noneAffordable ? `Available: ${fmt(card.available)} — closest to your required amount` : card.recommendation}</div>
                         <div className="rec-stats">
                           {[
-                            {label:'Available',val:fmtCurrency(card.available),color:card.canAfford?'#10b981':'#f59e0b'},
-                            {label:'Credit Limit',val:fmtCurrency(card.credit_limit),color:'inherit'},
+                            {label:'Available',val:fmt(card.available),color:card.canAfford?'#10b981':'#f59e0b'},
+                            {label:'Credit Limit',val:fmt(card.credit_limit),color:'inherit'},
                             {label:'Days to Billing',val:`${card.daysToBilling}d`,color:urgencyColor(card.daysToBilling)},
                             {label:'Days to Due',val:`${card.daysToDue}d`,color:urgencyColor(card.daysToDue)},
                             {label:'Interest-Free',val:`${card.daysToBilling+card.daysToDue}d`,color:'#4361ee'},
@@ -580,11 +606,11 @@ function RecommendModal({ onClose }) {
 // ─── Export Statement ─────────────────────────────────────────
 function exportStatement(card, transactions) {
   const rows=transactions.filter(t=>t.card_id===card.id||t.card_number===card.card_number)
-    .map(t=>`${new Date(t.transaction_date).toLocaleDateString()}\t${t.description||''}\t${t.type}\tAED ${t.amount.toLocaleString()}`).join('\n');
+    .map(t=>`${new Date(t.transaction_date).toLocaleDateString()}\t${t.description||''}\t${t.type}\t${getCountry().symbol} ${t.amount.toLocaleString()}`).join('\n');
   const content=['CREDIT CARD STATEMENT',`Generated: ${new Date().toLocaleString()}`,'',
     `Bank: ${card.bank_name}`,`Card: ${maskCard(card.card_number)}`,`Holder: ${card.holder_name}`,
-    `Limit: AED ${card.credit_limit.toLocaleString()}`,`Outstanding: AED ${card.outstanding_balance.toLocaleString()}`,
-    `Available: AED ${(card.credit_limit-card.outstanding_balance).toLocaleString()}`,
+    `Limit: ${getCountry().symbol} ${card.credit_limit.toLocaleString()}`,`Outstanding: ${getCountry().symbol} ${card.outstanding_balance.toLocaleString()}`,
+    `Available: ${getCountry().symbol} ${(card.credit_limit-card.outstanding_balance).toLocaleString()}`,
     `Billing: ${card.billing_date}th | Due: ${card.due_date}th`,'',
     'TRANSACTIONS','Date\tDescription\tType\tAmount',rows||'(None)'].join('\n');
   const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob([content],{type:'text/plain'})),download:`${card.bank_name}_${new Date().toISOString().slice(0,10)}.txt`});
@@ -597,6 +623,10 @@ export default function App() {
     try { const s = sessionStorage.getItem('cc_user'); return s ? JSON.parse(s) : null; } catch { return null; }
   });
   const [logo, setLogo] = useState(localStorage.getItem('cc_logo')||null);
+  const [countryKey, setCountry] = useState(localStorage.getItem('cc_country')||'UAE');
+  const country = COUNTRIES[countryKey] || COUNTRIES.UAE;
+  const switchCountry = (key) => { setCountryKey(key); setCountry(key); };
+  const fmt = (val) => fmt(val, countryKey);
   const [dashboard,setDashboard]=useState(null);
   const [transactions,setTransactions]=useState([]);
   const [notifications,setNotifications]=useState([]);
@@ -767,9 +797,18 @@ export default function App() {
               {activeTab==='analytics'&&'Spending Analytics'}
               {activeTab==='notifications'&&'Alert History'}
             </h1>
-            <p className="page-sub">{new Date().toLocaleDateString('en-AE',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</p>
+            <p className="page-sub">{new Date().toLocaleDateString(getCountry().locale,{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</p>
           </div>
-          <div style={{display:'flex',gap:'10px'}}>
+          <div style={{display:'flex',gap:'10px',alignItems:'center'}}>
+            {/* Country switcher */}
+            <div style={{display:'flex',alignItems:'center',gap:'6px',background:'var(--bg-3)',border:'1.5px solid var(--border)',borderRadius:'10px',padding:'6px 12px'}}>
+              {Object.entries(COUNTRIES).map(([key,cfg])=>(
+                <button key={key} onClick={()=>switchCountry(key)}
+                  style={{background:countryKey===key?'var(--accent)':'transparent',color:countryKey===key?'#fff':'var(--text-muted)',border:'none',borderRadius:'6px',padding:'4px 10px',fontSize:'12px',fontWeight:600,cursor:'pointer',transition:'all .15s',fontFamily:'inherit'}}>
+                  {cfg.label}
+                </button>
+              ))}
+            </div>
             <button className="btn btn-teal" onClick={()=>setShowRecommend(true)}>🎯 Best Card Advisor</button>
             <button className="btn btn-ghost" onClick={loadDashboard}>↺ Refresh</button>
           </div>
@@ -780,9 +819,9 @@ export default function App() {
           <div className="content">
             <div className="stats-row">
               {[
-                {icon:'💳',label:'Total Credit Limit',val:fmtCurrency(dashboard?.totalLimit),sub:`${cards.length} active card${cards.length!==1?'s':''}`,c:'c-blue'},
-                {icon:'⚠️',label:'Total Outstanding',val:fmtCurrency(dashboard?.totalOutstanding),sub:'across all cards',c:'c-red'},
-                {icon:'✅',label:'Available Credit',val:fmtCurrency(dashboard?.availableCredit),sub:'ready to use',c:'c-green'},
+                {icon:'💳',label:'Total Credit Limit',val:fmt(dashboard?.totalLimit),sub:`${cards.length} active card${cards.length!==1?'s':''}`,c:'c-blue'},
+                {icon:'⚠️',label:'Total Outstanding',val:fmt(dashboard?.totalOutstanding),sub:'across all cards',c:'c-red'},
+                {icon:'✅',label:'Available Credit',val:fmt(dashboard?.availableCredit),sub:'ready to use',c:'c-green'},
                 {icon:'📊',label:'Utilization',val:`${dashboard?.utilizationRate}%`,sub:'portfolio average',c:'c-gold',bar:true},
               ].map(s=>(
                 <div key={s.label} className={`stat-card ${s.c}`}>
@@ -851,7 +890,7 @@ export default function App() {
                         <div className="txn-meta">{txn.bank_name} · {new Date(txn.transaction_date).toLocaleDateString()}</div>
                       </div>
                       <div className={`txn-amount ${txn.type==='payment'?'credit':'debit'}`}>
-                        {txn.type==='payment'?'−':'+'}{fmtCurrency(txn.amount)}
+                        {txn.type==='payment'?'−':'+'}{fmt(txn.amount)}
                       </div>
                     </div>
                   ))}
@@ -871,8 +910,8 @@ export default function App() {
                   <CreditCardVisual card={card} selected={selectedCard?.id===card.id}/>
                   <div className="card-panel-details">
                     {[
-                      {label:'Credit Limit',val:fmtCurrency(card.credit_limit)},
-                      {label:'Available',val:fmtCurrency(card.credit_limit-card.outstanding_balance),color:card.credit_limit-card.outstanding_balance>0?'#10b981':'#f43f5e'},
+                      {label:'Credit Limit',val:fmt(card.credit_limit)},
+                      {label:'Available',val:fmt(card.credit_limit-card.outstanding_balance),color:card.credit_limit-card.outstanding_balance>0?'#10b981':'#f43f5e'},
                       {label:'Billing Day',val:`${card.billing_date}th`},
                       {label:'Due Day',val:`${card.due_date}th`},
                       {label:'SMS Alerts',val:card.sms_phone||'—'},
@@ -908,7 +947,7 @@ export default function App() {
           <div className="content">
             <div className="section">
 
-              {/* ── Row 1: Type filters + Add button ── */}
+              {/* Row 1: Type filters + Add button */}
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'8px',flexWrap:'wrap',marginBottom:'12px'}}>
                 <div style={{display:'flex',gap:'6px',alignItems:'center',flexWrap:'wrap'}}>
                   <span style={{fontSize:'10px',fontWeight:700,textTransform:'uppercase',letterSpacing:'.6px',color:'var(--text-muted)',marginRight:'4px'}}>Type</span>
@@ -921,48 +960,35 @@ export default function App() {
                 <button className="btn btn-primary btn-sm" onClick={()=>setShowTxnModal(true)}>+ Add Transaction</button>
               </div>
 
-              {/* ── Row 2: Card + Date range filters ── */}
+              {/* Row 2: Card + Date range filters */}
               <div style={{display:'flex',alignItems:'flex-end',gap:'12px',flexWrap:'wrap',marginBottom:'20px',paddingBottom:'16px',borderBottom:'1.5px solid var(--border)'}}>
-                {/* Card filter */}
                 <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
                   <span style={{fontSize:'10px',fontWeight:700,textTransform:'uppercase',letterSpacing:'.6px',color:'var(--text-muted)'}}>Card</span>
                   <select value={txnCardFilter} onChange={e=>setTxnCardFilter(e.target.value)} className="txn-filter-select">
                     <option value="all">All Cards</option>
-                    {cards.map(c=>(
-                      <option key={c.id} value={c.id}>{c.bank_name} ****{c.card_number.slice(-4)}</option>
-                    ))}
+                    {cards.map(c=><option key={c.id} value={c.id}>{c.bank_name} ****{c.card_number.slice(-4)}</option>)}
                   </select>
                 </div>
-
-                {/* Date From */}
                 <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
                   <span style={{fontSize:'10px',fontWeight:700,textTransform:'uppercase',letterSpacing:'.6px',color:'var(--text-muted)'}}>From Date</span>
-                  <input type="date" value={txnDateFrom} max={txnDateTo||undefined}
-                    onChange={e=>setTxnDateFrom(e.target.value)} className="txn-filter-date"/>
+                  <input type="date" value={txnDateFrom} max={txnDateTo||undefined} onChange={e=>setTxnDateFrom(e.target.value)} className="txn-filter-date"/>
                 </div>
-
-                {/* Date To */}
                 <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
                   <span style={{fontSize:'10px',fontWeight:700,textTransform:'uppercase',letterSpacing:'.6px',color:'var(--text-muted)'}}>To Date</span>
-                  <input type="date" value={txnDateTo} min={txnDateFrom||undefined}
-                    onChange={e=>setTxnDateTo(e.target.value)} className="txn-filter-date"/>
+                  <input type="date" value={txnDateTo} min={txnDateFrom||undefined} onChange={e=>setTxnDateTo(e.target.value)} className="txn-filter-date"/>
                 </div>
-
-                {/* Clear button */}
                 {(txnCardFilter!=='all'||txnDateFrom||txnDateTo||txnFilter!=='all')&&(
                   <button className="btn btn-ghost btn-sm" style={{marginBottom:'1px'}}
                     onClick={()=>{setTxnFilter('all');setTxnCardFilter('all');setTxnDateFrom('');setTxnDateTo('');}}>
                     ✕ Clear
                   </button>
                 )}
-
-                {/* Results count */}
                 <div style={{marginLeft:'auto',fontSize:'12px',color:'var(--text-muted)',paddingBottom:'4px'}}>
                   {filteredTxns.length} of {transactions.length} transactions
                 </div>
               </div>
 
-              {/* ── Table ── */}
+              {/* Table */}
               <div className="txn-table-wrap">
                 <table className="txn-table">
                   <thead>
@@ -975,13 +1001,9 @@ export default function App() {
                   <tbody>
                     {filteredTxns.map(txn=>(
                       editingTxnId===txn.id
-                        ? <InlineTxnEdit
-                            key={txn.id}
-                            txn={txn}
-                            cards={cards}
+                        ? <InlineTxnEdit key={txn.id} txn={txn} cards={cards}
                             onSave={()=>{setEditingTxnId(null);loadDashboard();toast('✅ Transaction updated!');}}
-                            onCancel={()=>setEditingTxnId(null)}
-                          />
+                            onCancel={()=>setEditingTxnId(null)}/>
                         : <tr key={txn.id} className="txn-table-row">
                             <td>{new Date(txn.transaction_date).toLocaleDateString('en-AE')}</td>
                             <td>
@@ -992,20 +1014,18 @@ export default function App() {
                             <td><span className={`type-badge ${txn.type}`}>{txn.type}</span></td>
                             <td style={{textAlign:'right'}}>
                               <span className={txn.type==='payment'?'credit':'debit'}>
-                                {txn.type==='payment'?'−':'+'}{fmtCurrency(txn.amount)}
+                                {txn.type==='payment'?'−':'+'}{fmt(txn.amount)}
                               </span>
                             </td>
                             <td style={{textAlign:'center',whiteSpace:'nowrap'}}>
                               <button onClick={()=>setEditingTxnId(txn.id)} title="Edit"
                                 style={{background:'none',border:'none',cursor:'pointer',fontSize:'15px',padding:'3px 4px',color:'#94a3b8',borderRadius:'6px'}}
                                 onMouseEnter={e=>e.currentTarget.style.color='#4361ee'}
-                                onMouseLeave={e=>e.currentTarget.style.color='#94a3b8'}
-                              >✏️</button>
+                                onMouseLeave={e=>e.currentTarget.style.color='#94a3b8'}>✏️</button>
                               <button onClick={()=>handleDeleteTxn(txn.id)} title="Delete"
                                 style={{background:'none',border:'none',cursor:'pointer',fontSize:'15px',padding:'3px 4px',color:'#94a3b8',borderRadius:'6px'}}
                                 onMouseEnter={e=>e.currentTarget.style.color='#f43f5e'}
-                                onMouseLeave={e=>e.currentTarget.style.color='#94a3b8'}
-                              >🗑️</button>
+                                onMouseLeave={e=>e.currentTarget.style.color='#94a3b8'}>🗑️</button>
                             </td>
                           </tr>
                     ))}
@@ -1022,8 +1042,8 @@ export default function App() {
           <div className="content">
             <div className="stats-row" style={{gridTemplateColumns:'repeat(3,1fr)'}}>
               {[
-                {label:'This Month Charged',val:fmtCurrency(transactions.filter(t=>{const d=new Date(t.transaction_date),n=new Date();return t.type==='charge'&&d.getMonth()===n.getMonth()&&d.getFullYear()===n.getFullYear();}).reduce((s,t)=>s+t.amount,0))},
-                {label:'This Month Payments',val:fmtCurrency(transactions.filter(t=>{const d=new Date(t.transaction_date),n=new Date();return t.type==='payment'&&d.getMonth()===n.getMonth()&&d.getFullYear()===n.getFullYear();}).reduce((s,t)=>s+t.amount,0)),color:'var(--green)'},
+                {label:'This Month Charged',val:fmt(transactions.filter(t=>{const d=new Date(t.transaction_date),n=new Date();return t.type==='charge'&&d.getMonth()===n.getMonth()&&d.getFullYear()===n.getFullYear();}).reduce((s,t)=>s+t.amount,0))},
+                {label:'This Month Payments',val:fmt(transactions.filter(t=>{const d=new Date(t.transaction_date),n=new Date();return t.type==='payment'&&d.getMonth()===n.getMonth()&&d.getFullYear()===n.getFullYear();}).reduce((s,t)=>s+t.amount,0)),color:'var(--green)'},
                 {label:'Total Transactions',val:transactions.length.toString()},
               ].map(s=>(
                 <div key={s.label} className="stat-card">
@@ -1048,7 +1068,7 @@ export default function App() {
                           <div style={{width:'10px',height:'10px',borderRadius:'50%',background:c.color||getBankColor(c.bank_name)}}/>
                           <span style={{color:'var(--text)',fontWeight:500}}>{c.bank_name}</span>
                         </div>
-                        <strong style={{color:'var(--text)'}}>{fmtCurrency(c.credit_limit)}</strong>
+                        <strong style={{color:'var(--text)'}}>{fmt(c.credit_limit)}</strong>
                       </div>
                     ))}
                   </div>
@@ -1067,7 +1087,7 @@ export default function App() {
                         <div className="spend-desc">{s.description||'Unnamed'}</div>
                         <div className="spend-bar-wrap"><div className="spend-bar" style={{width:`${(s.total/max)*100}%`,background:CHART_COLORS[i%CHART_COLORS.length]}}/></div>
                       </div>
-                      <div className="spend-amount">{fmtCurrency(s.total)}</div>
+                      <div className="spend-amount">{fmt(s.total)}</div>
                       <div className="spend-count">{s.count}×</div>
                     </div>
                   );
