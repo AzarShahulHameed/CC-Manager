@@ -1261,117 +1261,6 @@ function SettingsPage({ user, offices, toast, onProfileSaved }) {
   );
 }
 
-// ─── Profile Modal ──────────────────────────────────────────
-function ProfileModal({ user, onClose, onSaved, toast }) {
-  const [form, setForm] = useState({ full_name: user.full_name, username: user.username });
-  const [avatarPreview, setAvatarPreview] = useState(user.avatar_url || null);
-  const [saving, setSaving] = useState(false);
-  const [pwForm, setPwForm] = useState({ current_password:'', new_password:'', confirm:'' });
-  const [pwSaving, setPwSaving] = useState(false);
-  const [pwError, setPwError] = useState('');
-  const fileInput = useRef();
-
-  const handlePhotoChange = (e) => {
-    const file = e.target.files[0]; if (!file) return;
-    if (file.size > 1_500_000) { alert('Photo is too large — pick one under ~1.5MB'); return; }
-    const reader = new FileReader();
-    reader.onload = ev => setAvatarPreview(ev.target.result);
-    reader.readAsDataURL(file);
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      const body = { ...form };
-      if (avatarPreview !== user.avatar_url) body.avatar_url = avatarPreview;
-      const res = await authFetch(`${API}/auth/me`, {
-        method: 'PATCH', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(body)
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Update failed');
-      onSaved(data.user);
-      toast(form.username !== user.username
-        ? '✅ Profile updated — log out and back in with your new username next time'
-        : '✅ Profile updated');
-    } catch (err) { alert('Error: ' + err.message); }
-    finally { setSaving(false); }
-  };
-
-  const handlePasswordChange = async (e) => {
-    e.preventDefault();
-    setPwError('');
-    if (pwForm.new_password.length < 8) { setPwError('New password must be at least 8 characters'); return; }
-    if (pwForm.new_password !== pwForm.confirm) { setPwError("New passwords don't match"); return; }
-    setPwSaving(true);
-    try {
-      const res = await authFetch(`${API}/auth/change-password`, {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ current_password: pwForm.current_password, new_password: pwForm.new_password })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Could not change password');
-      setPwForm({ current_password:'', new_password:'', confirm:'' });
-      toast('✅ Password changed');
-    } catch (err) { setPwError(err.message); }
-    finally { setPwSaving(false); }
-  };
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal modal-sm" onClick={e=>e.stopPropagation()}>
-        <div className="modal-header"><h2>👤 Edit Profile</h2><button className="close-btn" onClick={onClose}>✕</button></div>
-
-        <form onSubmit={handleSubmit} className="card-form">
-          <div style={{display:'flex',alignItems:'center',gap:'14px',marginBottom:'4px'}}>
-            <div onClick={()=>fileInput.current.click()} title="Click to change photo"
-              style={{width:'56px',height:'56px',borderRadius:'50%',background:avatarPreview?`url(${avatarPreview})`:'var(--accent)',backgroundSize:'cover',backgroundPosition:'center',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:700,fontSize:'20px',cursor:'pointer',flexShrink:0}}>
-              {!avatarPreview && form.full_name.charAt(0)}
-            </div>
-            <div>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={()=>fileInput.current.click()}>Change Photo</button>
-              <input ref={fileInput} type="file" accept="image/*" style={{display:'none'}} onChange={handlePhotoChange}/>
-            </div>
-          </div>
-          <div className="form-group"><label>Display Name</label>
-            <input value={form.full_name} onChange={e=>setForm(f=>({...f,full_name:e.target.value}))} required/>
-          </div>
-          <div className="form-group"><label>Username</label>
-            <input value={form.username} onChange={e=>setForm(f=>({...f,username:e.target.value}))} required minLength={3}/>
-          </div>
-          <div className="form-actions">
-            <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-primary" disabled={saving}>{saving?'Saving...':'Save Changes'}</button>
-          </div>
-        </form>
-
-        <div style={{borderTop:'1px solid var(--border)',margin:'20px 0 16px',paddingTop:'16px'}}>
-          <h3 style={{fontSize:'13px',fontWeight:700,marginBottom:'12px',color:'var(--text)'}}>Change Password</h3>
-          <form onSubmit={handlePasswordChange} className="card-form">
-            {pwError && <div className="login-error">⚠️ {pwError}</div>}
-            <div className="form-group"><label>Current Password</label>
-              <input type="password" value={pwForm.current_password} onChange={e=>setPwForm(f=>({...f,current_password:e.target.value}))} required/>
-            </div>
-            <div className="form-group"><label>New Password</label>
-              <input type="password" value={pwForm.new_password} onChange={e=>setPwForm(f=>({...f,new_password:e.target.value}))} required minLength={8}/>
-            </div>
-            <div className="form-group"><label>Confirm New Password</label>
-              <input type="password" value={pwForm.confirm} onChange={e=>setPwForm(f=>({...f,confirm:e.target.value}))} required minLength={8}/>
-            </div>
-            <div className="form-actions">
-              <button type="submit" className="btn btn-primary" disabled={pwSaving}>{pwSaving?'Updating...':'Update Password'}</button>
-            </div>
-          </form>
-        </div>
-
-        <p style={{fontSize:'11.5px',color:'var(--text-faint)',lineHeight:1.5}}>
-          Your session stays active for 12 hours after login, then you'll need to sign in again. There's no multi-device session list yet — that's a bigger feature, flag it if you need it.
-        </p>
-      </div>
-    </div>
-  );
-}
 
 // ─── CSV Export ─────────────────────────────────────────────
 // Proper CSV: quoted fields, commas/quotes escaped, opens cleanly in Excel/Sheets.
@@ -1510,13 +1399,18 @@ function AcceptInvitePage({ token }) {
 }
 
 export default function App() {
-  // Entry-point routing: an invite link loads the app fresh at this URL, and
-  // never navigates away from it without a full page reload — so it's safe
-  // to branch before the rest of the app's hooks below.
+  // Entry-point routing: an invite link loads the app fresh at this URL.
+  // This top-level component itself calls no hooks, so there's nothing to
+  // violate rules-of-hooks over — the actual app hooks all live in MainApp,
+  // called unconditionally every time MainApp renders.
   if (window.location.pathname === '/accept-invite') {
     const token = new URLSearchParams(window.location.search).get('token');
     return <AcceptInvitePage token={token} />;
   }
+  return <MainApp />;
+}
+
+function MainApp() {
   const [user, setUser] = useState(() => {
     try { const s = localStorage.getItem('cc_user'); return s ? JSON.parse(s) : null; } catch { return null; }
   });
@@ -1689,7 +1583,6 @@ export default function App() {
     return true;
   });
 
-  const isAdmin = user.role === 'admin';
   const isGlobalAdmin = user.role === 'admin' && user.office_id === null;
 
   return(
