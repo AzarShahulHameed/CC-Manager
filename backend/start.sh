@@ -1,17 +1,19 @@
 #!/bin/bash
+# Run from inside backend/ (where this script lives).
+set -e
 echo "🚀 Starting CC Manager..."
 echo ""
 
-# Start backend in background
+echo "▶ Checking for pending migrations..."
+npm run migrate
+
 echo "▶ Starting backend on http://localhost:3001"
-cd backend && npm start &
+npm start &
 BACKEND_PID=$!
 
 sleep 2
 
-# Start frontend
 echo "▶ Starting frontend on http://localhost:3000"
 cd ../frontend && npm start
 
-# Cleanup on exit
 trap "kill $BACKEND_PID" EXIT

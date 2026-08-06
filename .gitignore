@@ -1,65 +1,37 @@
-####################################
-# OS / Editor files
-####################################
-.DS_Store
-Thumbs.db
-.vscode/
-.idea/
-*.log
-
-####################################
-# Environment files
-####################################
-.env
-.env.*
-!.env.example
-
-####################################
-# Node.js
-####################################
+# Dependencies
 node_modules/
+*/node_modules/
+
+# Environment variables — never commit real secrets
+.env
+.env.local
+.env.*.local
+*/.env
+*/.env.local
+
+# Frontend build output
+frontend/build/
+frontend/.pnp
+frontend/.pnp.js
+
+# Backend
+backend/data/
+
+# Electron
+frontend/dist/
+frontend/dist-electron/
+
+# Logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+*.log
 
-####################################
-# Backend
-####################################
+# OS/editor cruft
+.DS_Store
+.vscode/
+.idea/
+Thumbs.db
 
-# Ignore database data only
-backend/data/
-
-# Ignore backend dependencies
-backend/node_modules/
-
-# Optional (if generated)
-backend/dist/
-backend/build/
-
-####################################
-# Frontend
-####################################
-
-# Ignore frontend dependencies
-frontend/node_modules/
-
-# Optional build output
-frontend/dist/
-frontend/build/
-
-####################################
-# Electron (if applicable)
-####################################
-frontend/.electron/
-
-####################################
-# Docker
-####################################
-*.pid
-
-####################################
-# Temporary files
-####################################
-*.tmp
-*.swp
-.cache/
+# Testing
+coverage/

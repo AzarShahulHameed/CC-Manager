@@ -3,7 +3,6 @@
   "description": "CC Manager Desktop Application",
   "version": "0.1.0",
   "private": true,
-  "proxy": "http://localhost:3001",
   "main": "electron.js",
   "homepage": ".",
   "dependencies": {
@@ -11,6 +10,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^13.5.0",
+    "esbuild": "^0.28.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-scripts": "5.0.1",
@@ -25,11 +25,22 @@
     "electron-build": "npm run build && electron-builder"
   },
   "eslintConfig": {
-    "extends": ["react-app", "react-app/jest"]
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
   },
   "browserslist": {
-    "production": [">0.2%", "not dead", "not op_mini all"],
-    "development": ["last 1 chrome version", "last 1 firefox version", "last 1 safari version"]
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
   },
   "devDependencies": {
     "concurrently": "^9.2.1",
@@ -37,22 +48,25 @@
     "electron-builder": "^26.8.1",
     "wait-on": "^9.0.5"
   },
-  
-"build": {
-  "appId": "com.yourcompany.ccmanager",
-  "productName": "CC Manager",
-  "files": [
-  "build/**/*",
-  "electron.js",
-  "public/**/*",
-  "node_modules/**/*",
-  "../backend/**/*"
-],
-  "asar": false,
-  "extraMetadata": {
-  "main": "electron.js"
-  },
-  "win": { "target": "nsis" },
-  "mac": { "target": "dmg" }
-}
+  "build": {
+    "appId": "com.yourcompany.ccmanager",
+    "productName": "CC Manager",
+    "files": [
+      "build/**/*",
+      "electron.js",
+      "public/**/*",
+      "node_modules/**/*",
+      "../backend/**/*"
+    ],
+    "asar": false,
+    "extraMetadata": {
+      "main": "electron.js"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    }
+  }
 }

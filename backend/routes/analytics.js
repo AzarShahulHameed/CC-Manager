@@ -1,10 +1,20 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
+const { requireAuth, resolveOfficeScope } = require('../middleware/auth');
+
+router.use(requireAuth, resolveOfficeScope);
 
 // Monthly spending per card (last 6 months)
 router.get('/spending', async (req, res) => {
   try {
+    const params = [];
+    let officeFilter = '';
+    if (req.officeScope !== null) {
+      params.push(req.officeScope);
+      officeFilter = `AND c.office_id = $${params.length}`;
+    }
+
     const spendingResult = await pool.query(`
       SELECT
         to_char(t.transaction_date, 'YYYY-MM') AS month,
@@ -15,9 +25,10 @@ router.get('/spending', async (req, res) => {
       FROM transactions t
       JOIN credit_cards c ON t.card_id = c.id
       WHERE t.transaction_date >= CURRENT_DATE - INTERVAL '6 months'
+      ${officeFilter}
       GROUP BY month, t.card_id, c.bank_name, c.card_number
       ORDER BY month ASC
-    `);
+    `, params);
 
     const rows = spendingResult.rows;
 
@@ -42,14 +53,16 @@ router.get('/spending', async (req, res) => {
 
     // Top spending categories (last 30 days)
     const topSpendResult = await pool.query(`
-      SELECT description, SUM(amount) AS total, COUNT(*) AS count
-      FROM transactions
-      WHERE type = 'charge'
-        AND transaction_date >= CURRENT_DATE - INTERVAL '30 days'
-      GROUP BY description
+      SELECT t.description, SUM(t.amount) AS total, COUNT(*) AS count
+      FROM transactions t
+      JOIN credit_cards c ON t.card_id = c.id
+      WHERE t.type = 'charge'
+        AND t.transaction_date >= CURRENT_DATE - INTERVAL '30 days'
+        ${officeFilter}
+      GROUP BY t.description
       ORDER BY total DESC
       LIMIT 10
-    `);
+    `, params);
 
     res.json({
       chartData,
@@ -66,7 +79,13 @@ router.get('/spending', async (req, res) => {
 // Card utilization
 router.get('/utilization', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM credit_cards');
+    const params = [];
+    let query = 'SELECT * FROM credit_cards';
+    if (req.officeScope !== null) {
+      params.push(req.officeScope);
+      query += ' WHERE office_id = $1';
+    }
+    const result = await pool.query(query, params);
 
     const data = result.rows.map(c => ({
       name: `${c.bank_name} ****${c.card_number.slice(-4)}`,

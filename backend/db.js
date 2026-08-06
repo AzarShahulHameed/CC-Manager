@@ -1,6 +1,6 @@
 const { Pool } = require('pg');
 
-console.log('✅ DATABASE_URL:', process.env.DATABASE_URL);
+console.log('✅ Database configured:', process.env.DATABASE_URL ? process.env.DATABASE_URL.replace(/:[^:@]+@/, ':****@') : 'NOT SET');
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,

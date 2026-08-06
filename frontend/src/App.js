@@ -1,33 +1,37 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './App.css';
 
-const API = 'https://cc-manager-8sgi.onrender.com/api';
+const API = process.env.REACT_APP_API || 'https://cc-manager-8sgi.onrender.com/api';
 
-// ─── Demo credentials (replace with real auth backend) ───────
-const DEMO_USER = { username: 'Admin Catapult', password: 'cat@2026', name: 'Saraswathy N', role: 'HR Manager' };
+// ─── Auth helpers ───────────────────────────────────────────────
+function getToken() { return localStorage.getItem('cc_token'); }
+function setToken(t) { if (t) localStorage.setItem('cc_token', t); else localStorage.removeItem('cc_token'); }
 
-// ─── Country Config ──────────────────────────────────────────
-const COUNTRIES = {
-  UAE: {
-    label: '🇦🇪 UAE',
-    currency: 'AED',
-    locale: 'en-AE',
-    symbol: 'AED',
-    banks: ['Emirates NBD','ADCB','FAB','Mashreq','HSBC','Standard Chartered','Citibank','RAK Bank','DIB','Du Titanium','Emirates Islamic','Emirates Islamic - Flex','Other'],
-  },
-  India: {
-    label: '🇮🇳 India',
-    currency: 'INR',
-    locale: 'en-IN',
-    symbol: '₹',
-    banks: ['SBI','HDFC Bank','ICICI Bank','Axis Bank','Kotak Mahindra','IndusInd Bank','Yes Bank','HSBC India','Standard Chartered India','Citi India','Other'],
-  },
-};
+// Wraps fetch: attaches the JWT, and force-logs-out on 401 so a dead/expired
+// token never just sits there silently failing every request.
+async function authFetch(url, opts = {}) {
+  const token = getToken();
+  const res = await fetch(url, {
+    ...opts,
+    headers: {
+      ...(opts.headers || {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    }
+  });
+  if (res.status === 401) {
+    setToken(null);
+    localStorage.removeItem('cc_user');
+    window.location.reload();
+    throw new Error('Session expired');
+  }
+  return res;
+}
 
-// Global country state (persisted to localStorage)
-let _country = localStorage.getItem('cc_country') || 'UAE';
-function getCountry() { return COUNTRIES[_country] || COUNTRIES.UAE; }
-function setCountryKey(key) { _country = key; localStorage.setItem('cc_country', key); }
+// ─── Office / currency config (was hardcoded COUNTRIES — now comes from the DB) ──
+const CURRENCY_SYMBOLS = { AED: 'AED', INR: '₹' };
+let _office = { id: null, code: 'UAE', name: 'UAE Office', currency: 'AED', locale: 'en-AE', symbol: 'AED', banks: [] };
+function getCountry() { return _office; }
+function setOfficeConfig(cfg) { _office = { ..._office, ...cfg, symbol: CURRENCY_SYMBOLS[cfg.currency] || cfg.currency }; }
 
 // ─── Utilities ───────────────────────────────────────────────
 function maskCard(num) {
@@ -35,8 +39,8 @@ function maskCard(num) {
   const c = num.replace(/\s/g, '');
   return `${c.slice(0,4)} •••• •••• ${c.slice(-4)}`;
 }
-function fmtCurrency(val, countryKey) {
-  const cfg = COUNTRIES[countryKey || _country] || COUNTRIES.UAE;
+function fmtCurrency(val) {
+  const cfg = getCountry();
   return new Intl.NumberFormat(cfg.locale, { style:'currency', currency:cfg.currency, maximumFractionDigits:0 }).format(val||0);
 }
 function getDaysUntil(dayOfMonth, fromDate) {
@@ -64,7 +68,18 @@ function getBankColor(n) {
 }
 const CHART_COLORS=['#4361ee','#f59e0b','#10b981','#7048e8','#f43f5e','#0ea5e9'];
 
-// ─── Login Page ───────────────────────────────────────────────
+// ─── Logo mark — an actual card, not an abstract seal ─────────
+function CardMark({ size = 24 }) {
+  return (
+    <svg width={size} height={size * 0.74} viewBox="0 0 40 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="1.5" y="1.5" width="37" height="27" rx="4" stroke="currentColor" strokeWidth="2.2"/>
+      <rect x="1.5" y="8" width="37" height="5.5" fill="currentColor"/>
+      <rect x="5.5" y="19.5" width="13" height="3" rx="1.2" fill="currentColor" opacity=".85"/>
+    </svg>
+  );
+}
+
+// ─── Login Page (real backend auth) ────────────────────────────
 function LoginPage({ onLogin, logo }) {
   const [form, setForm] = useState({ username:'', password:'' });
   const [showPw, setShowPw] = useState(false);
@@ -74,48 +89,33 @@ function LoginPage({ onLogin, logo }) {
   const handleSubmit = async e => {
     e.preventDefault();
     setLoading(true); setError('');
-    await new Promise(r => setTimeout(r, 600));
-    if (form.username === DEMO_USER.username && form.password === DEMO_USER.password) {
-      onLogin(DEMO_USER);
-    } else {
-      setError('Invalid username or password');
+    try {
+      const res = await fetch(`${API}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form)
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || 'Invalid username or password'); return; }
+      onLogin(data.user, data.token);
+    } catch (err) {
+      setError('Could not reach the server. Check your connection.');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
     <div className="login-page">
-      {/* Left panel */}
-      <div className="login-left">
-        <div className="login-left-bg" />
-        <div className="login-left-circles">
-          <span/><span/><span/>
-        </div>
-        <div className="login-brand">
-          <div className="login-logo-wrap">
-            {logo ? <img src={logo} alt="logo" style={{width:'100%',height:'100%',objectFit:'cover',borderRadius:'18px'}} /> : '◈'}
-          </div>
-          <div className="login-brand-name">CC Manager</div>
-          <div className="login-brand-sub">Executive Credit Card Dashboard</div>
-        </div>
-        <div className="login-features">
-          {[
-            { icon:'🎯', text:'Smart card advisor with date intelligence' },
-            { icon:'📊', text:'Real-time spending analytics' },
-            { icon:'🔔', text:'Automated SMS payment alerts' },
-            { icon:'💳', text:'Multi-card portfolio management' },
-          ].map(f => (
-            <div key={f.text} className="login-feature">
-              <div className="login-feature-icon">{f.icon}</div>
-              <span>{f.text}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Right panel */}
       <div className="login-right">
         <div className="login-form-wrap">
+          <div className="login-brand">
+            <div className="login-logo-wrap">
+              {logo ? <img src={logo} alt="logo" style={{width:'100%',height:'100%',objectFit:'cover',borderRadius:'13px'}} /> : <CardMark size={26}/>}
+            </div>
+            <div className="login-brand-name">CC Manager</div>
+            <div className="login-brand-sub">Executive Credit Card Dashboard</div>
+          </div>
           <div className="login-title">Welcome back</div>
           <div className="login-subtitle">Sign in to your CC Manager account</div>
           <form className="login-form" onSubmit={handleSubmit}>
@@ -131,7 +131,7 @@ function LoginPage({ onLogin, logo }) {
                 <input className="login-input" type={showPw?'text':'password'} placeholder="Enter password"
                   value={form.password} onChange={e => setForm(f=>({...f,password:e.target.value}))} required />
                 <button type="button" className="login-eye" onClick={() => setShowPw(p=>!p)}>
-                  {showPw ? '🙈' : '👁️'}
+                  {showPw ? 'Hide' : 'Show'}
                 </button>
               </div>
             </div>
@@ -180,7 +180,7 @@ function BarChart({ data, keys, colors }) {
 // ─── Donut Chart ─────────────────────────────────────────────
 function DonutChart({ cards }) {
   if (!cards || cards.length===0) return null;
-  const total = cards.reduce((s,c)=>s+c.credit_limit,0);
+  const total = cards.reduce((s,c)=>s+Number(c.credit_limit||0),0);
   let cum=0; const sz=160, r=58, circ=2*Math.PI*r;
   return (
     <div className="donut-wrap">
@@ -232,12 +232,23 @@ function CreditCardVisual({ card, onClick, selected }) {
 function InlineBalance({ card, onUpdated }) {
   const [editing,setEditing]=useState(false);
   const [val,setVal]=useState(card.outstanding_balance);
+  const [displayVal,setDisplayVal]=useState(card.outstanding_balance);
   const ref=useRef();
+
+  // Once the background refresh (onUpdated) completes and a new `card` prop
+  // arrives, sync back to it — this is the authoritative value.
+  useEffect(()=>{ setDisplayVal(card.outstanding_balance); },[card.outstanding_balance]);
+
   const save=async()=>{
+    const newVal = parseFloat(val)||0;
+    setDisplayVal(newVal);   // show it immediately, don't wait on the network
+    setEditing(false);
     try {
-      await fetch(`${API}/cards/${card.id}/balance`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({outstanding_balance:parseFloat(val)||0})});
-      setEditing(false); onUpdated();
-    } catch{setEditing(false);}
+      await authFetch(`${API}/cards/${card.id}/balance`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({outstanding_balance:newVal})});
+      onUpdated();            // background reconcile for totals/utilization elsewhere on the page
+    } catch {
+      setDisplayVal(card.outstanding_balance); // revert if the save actually failed
+    }
   };
   useEffect(()=>{if(editing&&ref.current)ref.current.focus();},[editing]);
   if(editing) return(
@@ -249,26 +260,37 @@ function InlineBalance({ card, onUpdated }) {
   );
   return(
     <span className="editable-balance" onClick={()=>{setVal(card.outstanding_balance);setEditing(true);}} title="Click to edit">
-      {fmtCurrency(card.outstanding_balance)}<span className="edit-icon">✎</span>
+      {fmtCurrency(displayVal)}<span className="edit-icon">✎</span>
     </span>
   );
 }
 
 // ─── Card Modal ───────────────────────────────────────────────
-function CardModal({ card, onClose, onSave }) {
-  const [form,setForm]=useState(card||{card_number:'',holder_name:'',bank_name:'',credit_limit:'',outstanding_balance:'0',billing_date:'',due_date:'',sms_phone:'',color:''});
+// `offices` + `bankLists` let an admin pick which office a card belongs to.
+// Non-admins never see the office field — the backend pins it to their office anyway.
+function CardModal({ card, onClose, onSave, user, offices, bankLists, defaultOfficeId }) {
+  const [form,setForm]=useState(card||{
+    card_number:'',holder_name:'',bank_name:'',credit_limit:'',outstanding_balance:'0',
+    billing_date:'',due_date:'',sms_phone:'',notify_email:'',color:'',
+    office_id: defaultOfficeId || ''
+  });
   const [saving,setSaving]=useState(false);
   const hc=e=>setForm(f=>({...f,[e.target.name]:e.target.value}));
   const rc=form.color||getBankColor(form.bank_name);
+  const isAdmin = user.role === 'admin';
+
   const handleSubmit=async e=>{
     e.preventDefault();setSaving(true);
     try{
-      const res=await fetch(card?`${API}/cards/${card.id}`:`${API}/cards`,{method:card?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...form,color:rc})});
-      if(!res.ok) throw new Error('Save failed');
+      const res=await authFetch(card?`${API}/cards/${card.id}`:`${API}/cards`,{method:card?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...form,color:rc})});
+      if(!res.ok) { const d=await res.json().catch(()=>({})); throw new Error(d.error||'Save failed'); }
       onSave();
     }catch(err){alert('Error: '+err.message);}finally{setSaving(false);}
   };
-  const banks=getCountry().banks;
+
+  const effectiveOfficeId = isAdmin ? (form.office_id || defaultOfficeId) : user.office_id;
+  const banks = bankLists[effectiveOfficeId] || [];
+
   return(
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e=>e.stopPropagation()}>
@@ -281,9 +303,17 @@ function CardModal({ card, onClose, onSave }) {
         </div>
         <form onSubmit={handleSubmit} className="card-form">
           <div className="form-grid">
+            {isAdmin && !card && (
+              <div className="form-group"><label>Office</label>
+                <select name="office_id" value={form.office_id} onChange={hc} required>
+                  <option value="">Select Office</option>
+                  {offices.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}
+                </select>
+              </div>
+            )}
             <div className="form-group"><label>Bank Name</label>
-              <select name="bank_name" value={form.bank_name} onChange={hc} required>
-                <option value="">Select Bank</option>
+              <select name="bank_name" value={form.bank_name} onChange={hc} required disabled={isAdmin && !card && !form.office_id}>
+                <option value="">{isAdmin && !card && !form.office_id ? 'Select office first' : 'Select Bank'}</option>
                 {banks.map(b=><option key={b}>{b}</option>)}
               </select>
             </div>
@@ -305,8 +335,11 @@ function CardModal({ card, onClose, onSave }) {
             <div className="form-group"><label>Due Date (1–31)</label>
               <input name="due_date" type="number" min="1" max="31" value={form.due_date} onChange={hc} placeholder="e.g. 25" required/>
             </div>
-            <div className="form-group"><label>SMS Phone</label>
+            <div className="form-group"><label>WhatsApp Number</label>
               <input name="sms_phone" value={form.sms_phone} onChange={hc} placeholder="+971501234567"/>
+            </div>
+            <div className="form-group"><label>Alert Email</label>
+              <input name="notify_email" type="email" value={form.notify_email||''} onChange={hc} placeholder="finance@cat-cons.com"/>
             </div>
             <div className="form-group"><label>Card Color</label>
               <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
@@ -327,116 +360,128 @@ function CardModal({ card, onClose, onSave }) {
 }
 
 // ─── Transaction Modal ────────────────────────────────────────
-function TransactionModal({ cards, onClose, onSave }) {
-  const todayDate = new Date().toISOString().slice(0, 10);
+// ─── Replace Card Modal (lost/expired/reissued card) ──────────
+function ReplaceCardModal({ card, onClose, onSave, bankLists }) {
   const [form, setForm] = useState({
-    card_id: '',
-    amount: '',
-    description: '',
-    type: 'charge',
-    transaction_date: todayDate
+    card_number: '', bank_name: card.bank_name, credit_limit: card.credit_limit,
+    billing_date: card.billing_date, due_date: card.due_date,
+    sms_phone: card.sms_phone || '', notify_email: card.notify_email || '', color: card.color
   });
+  const [saving, setSaving] = useState(false);
+  const banks = bankLists[card.office_id] || [];
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setSaving(true);
+    try {
+      const res = await authFetch(`${API}/cards/${card.id}/replace`, {
+        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(form)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Replace failed');
+      onSave();
+    } catch (err) { alert('Error: ' + err.message); }
+    finally { setSaving(false); }
+  };
 
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e=>e.stopPropagation()}>
+        <div className="modal-header"><h2>🔄 Replace Card</h2><button className="close-btn" onClick={onClose}>✕</button></div>
+        <p className="modal-desc">
+          For a lost, expired, or reissued card. The old card ({card.bank_name} {maskCard(card.card_number)}) gets archived —
+          its transaction history stays intact — and its outstanding balance ({fmtCurrency(card.outstanding_balance)}) moves to
+          the new card as a logged transaction, not a silent overwrite.
+        </p>
+        <form onSubmit={handleSubmit} className="card-form">
+          <div className="form-grid">
+            <div className="form-group"><label>New Card Number</label>
+              <input value={form.card_number} onChange={e=>setForm(f=>({...f,card_number:e.target.value}))} placeholder="1234 5678 9012 3456" required/>
+            </div>
+            <div className="form-group"><label>Bank</label>
+              <select value={form.bank_name} onChange={e=>setForm(f=>({...f,bank_name:e.target.value}))} required>
+                {banks.map(b=><option key={b}>{b}</option>)}
+                {!banks.includes(form.bank_name) && <option>{form.bank_name}</option>}
+              </select>
+            </div>
+            <div className="form-group"><label>Credit Limit</label>
+              <input type="number" value={form.credit_limit} onChange={e=>setForm(f=>({...f,credit_limit:e.target.value}))} required/>
+            </div>
+            <div className="form-group"><label>Billing Date</label>
+              <input type="number" min="1" max="31" value={form.billing_date} onChange={e=>setForm(f=>({...f,billing_date:e.target.value}))} required/>
+            </div>
+            <div className="form-group"><label>Due Date</label>
+              <input type="number" min="1" max="31" value={form.due_date} onChange={e=>setForm(f=>({...f,due_date:e.target.value}))} required/>
+            </div>
+            <div className="form-group"><label>WhatsApp Number</label>
+              <input value={form.sms_phone} onChange={e=>setForm(f=>({...f,sms_phone:e.target.value}))}/>
+            </div>
+            <div className="form-group"><label>Alert Email</label>
+              <input type="email" value={form.notify_email} onChange={e=>setForm(f=>({...f,notify_email:e.target.value}))}/>
+            </div>
+          </div>
+          <div className="form-actions">
+            <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>{saving?'Replacing...':'Replace Card'}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function TransactionModal({ cards, onClose, onSave }) {
+  const todayDate = new Date().toISOString().slice(0, 10);
+  const [form, setForm] = useState({ card_id:'', amount:'', description:'', type:'charge', transaction_date: todayDate });
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     try {
       const payload = {
-        card_id: Number(form.card_id),
-        amount: Number(form.amount),
-        description: form.description,
-        type: form.type,
-        transaction_date: form.transaction_date
+        card_id: Number(form.card_id), amount: Number(form.amount),
+        description: form.description, type: form.type, transaction_date: form.transaction_date
       };
-
-      const res = await fetch(`${API}/transactions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      if (!res.ok) throw new Error('Failed to add transaction');
-
-      await onSave();                         // ✅ wait for reload
-    } catch (err) {
-      alert('Error: ' + err.message);
-    }
+      const res = await authFetch(`${API}/transactions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (!res.ok) { const d = await res.json().catch(()=>({})); throw new Error(d.error||'Failed to add transaction'); }
+      await onSave();
+    } catch (err) { alert('Error: ' + err.message); }
   };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>💳 Add Transaction</h2>
-          <button className="close-btn" onClick={onClose}>✕</button>
-        </div>
-
+        <div className="modal-header"><h2>💳 Add Transaction</h2><button className="close-btn" onClick={onClose}>✕</button></div>
         <form onSubmit={handleSubmit} className="card-form">
           <div className="form-group">
             <label>Card</label>
-            <select
-              value={form.card_id}
-              onChange={e => setForm(f => ({ ...f, card_id: e.target.value }))}
-              required
-            >
+            <select value={form.card_id} onChange={e => setForm(f => ({ ...f, card_id: e.target.value }))} required>
               <option value="">Select Card</option>
-              {cards.map(c => (
-                <option key={c.id} value={c.id}>
-                  {c.bank_name} — ****{c.card_number.slice(-4)}
-                </option>
-              ))}
+              {cards.map(c => <option key={c.id} value={c.id}>{c.bank_name} — ****{c.card_number.slice(-4)}</option>)}
             </select>
           </div>
-
           <div className="form-group">
             <label>Type</label>
-            <select
-              value={form.type}
-              onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
-            >
+            <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
               <option value="charge">💳 Charge</option>
               <option value="payment">✅ Payment</option>
               <option value="adjustment">⚖️ Adjustment</option>
             </select>
           </div>
-
           <div className="form-group">
             <label>Amount ({getCountry().symbol})</label>
-            <input
-              type="number"
-              value={form.amount}
-              onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
-              required
-            />
+            <input type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} required/>
           </div>
-
           <div className="form-group">
             <label>Description</label>
-            <input
-              value={form.description}
-              onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-              placeholder="e.g. Hotel, Flight, Dinner"
-            />
+            <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="e.g. Hotel, Flight, Dinner"/>
           </div>
-
           <div className="form-group">
             <label>Transaction Date</label>
-            <input
-              type="date"
-              value={form.transaction_date}
-              max={new Date().toISOString().slice(0,10)}
-              onChange={e => setForm(f => ({ ...f, transaction_date: e.target.value }))}
-              required
-            />
+            <input type="date" value={form.transaction_date} max={new Date().toISOString().slice(0,10)} onChange={e => setForm(f => ({ ...f, transaction_date: e.target.value }))} required/>
           </div>
-
           <div className="form-actions">
-            <button type="button" className="btn btn-ghost" onClick={onClose}>
-              Cancel
-            </button>
-            <button type="submit" className="btn btn-primary">
-              Add Transaction
-            </button>
+            <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn btn-primary">Add Transaction</button>
           </div>
         </form>
       </div>
@@ -447,21 +492,16 @@ function TransactionModal({ cards, onClose, onSave }) {
 // ─── Inline Transaction Edit Row ─────────────────────────────
 function InlineTxnEdit({ txn, cards, onSave, onCancel }) {
   const [form, setForm] = useState({
-    amount:           txn.amount,
-    description:      txn.description || '',
-    type:             txn.type,
-    card_id:          txn.card_id,
-    transaction_date: txn.transaction_date
-      ? new Date(txn.transaction_date).toISOString().slice(0,10)
-      : new Date().toISOString().slice(0,10)
+    amount: txn.amount, description: txn.description || '', type: txn.type, card_id: txn.card_id,
+    transaction_date: txn.transaction_date ? new Date(txn.transaction_date).toISOString().slice(0,10) : new Date().toISOString().slice(0,10)
   });
   const handleSave = async () => {
     try {
-      const res = await fetch(`${API}/transactions/${txn.id}`,{
+      const res = await authFetch(`${API}/transactions/${txn.id}`,{
         method:'PUT', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({...form, amount:parseFloat(form.amount), card_id:Number(form.card_id)})
       });
-      if(!res.ok) throw new Error('Update failed');
+      if(!res.ok) { const d=await res.json().catch(()=>({})); throw new Error(d.error||'Update failed'); }
       onSave();
     } catch(err){ alert('Error: '+err.message); }
   };
@@ -473,21 +513,19 @@ function InlineTxnEdit({ txn, cards, onSave, onCancel }) {
       </select></td>
       <td><input value={form.description} onChange={e=>setForm(f=>({...f,description:e.target.value}))} className="txn-inline-input" placeholder="Description" style={{width:'140px'}}/></td>
       <td><select value={form.type} onChange={e=>setForm(f=>({...f,type:e.target.value}))} className="txn-inline-input">
-        <option value="charge">Charge</option>
-        <option value="payment">Payment</option>
-        <option value="adjustment">Adjustment</option>
+        <option value="charge">Charge</option><option value="payment">Payment</option><option value="adjustment">Adjustment</option>
       </select></td>
       <td><input type="number" value={form.amount} onChange={e=>setForm(f=>({...f,amount:e.target.value}))} className="txn-inline-input" style={{width:'100px',textAlign:'right'}}/></td>
       <td style={{textAlign:'center',whiteSpace:'nowrap'}}>
-        <button onClick={handleSave} title="Save" style={{background:'none',border:'none',cursor:'pointer',fontSize:'18px',color:'#10b981',padding:'2px 5px'}}>✅</button>
-        <button onClick={onCancel} title="Cancel" style={{background:'none',border:'none',cursor:'pointer',fontSize:'18px',color:'#94a3b8',padding:'2px 5px'}}>✕</button>
+        <button onClick={handleSave} title="Save" className="icon-btn success" style={{fontSize:'18px'}}>✅</button>
+        <button onClick={onCancel} title="Cancel" className="icon-btn" style={{fontSize:'18px'}}>✕</button>
       </td>
     </tr>
   );
 }
 
-// ─── Best Card Advisor Modal (with date) ─────────────────────
-function RecommendModal({ onClose }) {
+// ─── Best Card Advisor Modal ─────────────────────
+function RecommendModal({ onClose, officeParam }) {
   const [amount,setAmount]=useState('');
   const today=new Date().toISOString().slice(0,10);
   const [payDate,setPayDate]=useState(today);
@@ -498,7 +536,7 @@ function RecommendModal({ onClose }) {
     if(!amount) return;
     setLoading(true);
     try{
-      const data=await fetch(`${API}/recommend?amount=${amount}&date=${payDate}`).then(r=>r.json());
+      const data=await authFetch(`${API}/recommend?amount=${amount}&date=${payDate}${officeParam}`).then(r=>r.json());
       setResults(data);
     }catch(err){alert('Error: '+err.message);}
     finally{setLoading(false);}
@@ -512,14 +550,10 @@ function RecommendModal({ onClose }) {
   return(
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal modal-wide" onClick={e=>e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>🎯 Best Card Advisor</h2>
-          <button className="close-btn" onClick={onClose}>✕</button>
-        </div>
+        <div className="modal-header"><h2>🎯 Best Card Advisor</h2><button className="close-btn" onClick={onClose}>✕</button></div>
         <p className="modal-desc">
           Choose the <strong>payment date</strong> and <strong>amount</strong>. The system will analyze your billing cycles relative to that specific date and recommend the optimal card — maximizing your interest-free window.
         </p>
-
         <div className="advisor-inputs">
           <div className="advisor-field">
             <label>Payment Amount ({getCountry().symbol})</label>
@@ -529,27 +563,23 @@ function RecommendModal({ onClose }) {
           </div>
           <div className="advisor-field">
             <label>Payment Date</label>
-            <input type="date" value={payDate} onChange={e=>setPayDate(e.target.value)}
-              min={today} className="advisor-date-input"/>
+            <input type="date" value={payDate} onChange={e=>setPayDate(e.target.value)} min={today} className="advisor-date-input"/>
           </div>
           <button className="btn btn-primary" onClick={handleCheck} disabled={loading} style={{height:'50px',alignSelf:'flex-end'}}>
             {loading?'⏳ Analyzing..':'🔍 Analyze'}
           </button>
         </div>
-
         {payDate && (
           <div className="advisor-explain">
             📅 Analyzing card fitness for a payment on <strong>{formatPayDate(payDate)}</strong>.
             Days until each card's billing cycle and due date are calculated from this specific date.
           </div>
         )}
-
         {results && (
           <div className="recommend-results">
             {(() => {
               const affordable = results.recommendations.filter(c => c.canAfford);
-              const showCards = affordable.length > 0
-                ? affordable.slice(0, 3)
+              const showCards = affordable.length > 0 ? affordable.slice(0, 3)
                 : [...results.recommendations].sort((a,b) => b.available - a.available).slice(0, 3);
               const noneAffordable = affordable.length === 0;
               return (
@@ -586,10 +616,7 @@ function RecommendModal({ onClose }) {
                           ))}
                         </div>
                       </div>
-                      <div className="rec-score-wrap">
-                        <div className="rec-score">{card.score}</div>
-                        <div className="rec-score-label">score</div>
-                      </div>
+                      <div className="rec-score-wrap"><div className="rec-score">{card.score}</div><div className="rec-score-label">score</div></div>
                     </div>
                   ))}
                 </>
@@ -602,38 +629,916 @@ function RecommendModal({ onClose }) {
   );
 }
 
-// ─── Export Statement ─────────────────────────────────────────
-function exportStatement(card, transactions) {
-  const rows=transactions.filter(t=>t.card_id===card.id||t.card_number===card.card_number)
-    .map(t=>`${new Date(t.transaction_date).toLocaleDateString()}\t${t.description||''}\t${t.type}\t${getCountry().symbol} ${t.amount.toLocaleString()}`).join('\n');
-  const content=['CREDIT CARD STATEMENT',`Generated: ${new Date().toLocaleString()}`,'',
-    `Bank: ${card.bank_name}`,`Card: ${maskCard(card.card_number)}`,`Holder: ${card.holder_name}`,
-    `Limit: ${getCountry().symbol} ${card.credit_limit.toLocaleString()}`,`Outstanding: ${getCountry().symbol} ${card.outstanding_balance.toLocaleString()}`,
-    `Available: ${getCountry().symbol} ${(card.credit_limit-card.outstanding_balance).toLocaleString()}`,
-    `Billing: ${card.billing_date}th | Due: ${card.due_date}th`,'',
-    'TRANSACTIONS','Date\tDescription\tType\tAmount',rows||'(None)'].join('\n');
-  const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob([content],{type:'text/plain'})),download:`${card.bank_name}_${new Date().toISOString().slice(0,10)}.txt`});
+// ─── Settings Page ─────────────────────────────────────────────
+// Everything here used to require editing App.js and redeploying. Now it's just API calls.
+function SettingsPage({ user, offices, toast, onProfileSaved }) {
+  const [tab, setTab] = useState('profile');
+  const [users, setUsers] = useState([]);
+  const [settingsOfficeId, setSettingsOfficeId] = useState(user.office_id || offices[0]?.id || '');
+  const [banks, setBanks] = useState([]);
+  const [newBank, setNewBank] = useState('');
+  const [channels, setChannels] = useState({ whatsapp: true, email: true });
+  const [showAddUser, setShowAddUser] = useState(false);
+  const [newUser, setNewUser] = useState({ username:'', email:'', full_name:'', role:'viewer', office_id:'' });
+  const [editingUser, setEditingUser] = useState(null);
+  const [pwResetFor, setPwResetFor] = useState(null);
+  const [newPw, setNewPw] = useState('');
+  const [testPhone, setTestPhone] = useState('');
+  const [testEmail, setTestEmail] = useState('');
+  const [testingChannel, setTestingChannel] = useState(null);
+  const [auditLog, setAuditLog] = useState([]);
+  const [auditLoaded, setAuditLoaded] = useState(false);
+  const [templates, setTemplates] = useState([]);
+  const [selectedTemplateKey, setSelectedTemplateKey] = useState('invite');
+  const [templateDraft, setTemplateDraft] = useState({ subject: '', body: '' });
+  const [templateSaving, setTemplateSaving] = useState(false);
+  const [previewData, setPreviewData] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [profileForm, setProfileForm] = useState({ full_name: user.full_name, username: user.username });
+  const [avatarPreview, setAvatarPreview] = useState(user.avatar_url || null);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [pwForm, setPwForm] = useState({ current_password:'', new_password:'', confirm:'' });
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwError, setPwError] = useState('');
+  const avatarFileInput = useRef();
+
+  const loadUsers = useCallback(async () => {
+    if (user.role !== 'admin') return;
+    const res = await authFetch(`${API}/admin/users`);
+    setUsers(await res.json());
+  }, [user.role]);
+
+  const loadOfficeSettings = useCallback(async (officeId) => {
+    if (!officeId) return;
+    const [banksRes, chanRes] = await Promise.all([
+      authFetch(`${API}/admin/settings?category=banks&office_id=${officeId}`).then(r=>r.json()),
+      authFetch(`${API}/admin/settings?category=notifications&office_id=${officeId}`).then(r=>r.json()),
+    ]);
+    const banksRow = banksRes.find(r => r.key === 'list' && r.office_id === Number(officeId));
+    setBanks(banksRow?.value || []);
+    const chanRow = chanRes.find(r => r.key === 'channels' && r.office_id === Number(officeId));
+    setChannels(chanRow?.value || { whatsapp: true, email: true });
+  }, []);
+
+  useEffect(() => { loadUsers(); }, [loadUsers]);
+  useEffect(() => {
+    if (tab === 'audit' && user.role === 'admin' && !auditLoaded) {
+      authFetch(`${API}/admin/audit-log`).then(r=>r.json()).then(data => {
+        setAuditLog(Array.isArray(data) ? data : []);
+        setAuditLoaded(true);
+      });
+    }
+  }, [tab, user.role, auditLoaded]);
+  useEffect(() => { loadOfficeSettings(settingsOfficeId); }, [settingsOfficeId, loadOfficeSettings]);
+
+  const loadTemplates = useCallback(async () => {
+    if (!settingsOfficeId) return;
+    const res = await authFetch(`${API}/admin/email-templates?office_id=${settingsOfficeId}`);
+    const data = await res.json();
+    setTemplates(Array.isArray(data) ? data : []);
+  }, [settingsOfficeId]);
+
+  useEffect(() => {
+    if (tab === 'emailTemplates') loadTemplates();
+  }, [tab, loadTemplates]);
+
+  useEffect(() => {
+    const t = templates.find(t => t.key === selectedTemplateKey);
+    if (t) { setTemplateDraft({ subject: t.subject, body: t.body }); setPreviewData(null); }
+  }, [templates, selectedTemplateKey]);
+
+  const handlePreviewTemplate = async () => {
+    setPreviewLoading(true);
+    try {
+      const res = await authFetch(`${API}/admin/email-templates/${selectedTemplateKey}/preview`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(templateDraft)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Preview failed');
+      setPreviewData(data);
+    } catch (err) { alert('Error: ' + err.message); }
+    finally { setPreviewLoading(false); }
+  };
+
+  const handleSaveTemplate = async () => {
+    setTemplateSaving(true);
+    try {
+      const res = await authFetch(`${API}/admin/email-templates/${selectedTemplateKey}`, {
+        method: 'PUT', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ ...templateDraft, office_id: settingsOfficeId })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Save failed');
+      await loadTemplates();
+      toast('✅ Template saved');
+    } catch (err) { alert('Error: ' + err.message); }
+    finally { setTemplateSaving(false); }
+  };
+
+  const handleResetTemplate = async () => {
+    if (!window.confirm('Reset this template to the default? Your customization will be lost.')) return;
+    try {
+      await authFetch(`${API}/admin/email-templates/${selectedTemplateKey}?office_id=${settingsOfficeId}`, { method: 'DELETE' });
+      await loadTemplates();
+      toast('✅ Reset to default');
+    } catch (err) { alert('Error: ' + err.message); }
+  };
+
+  const saveBanks = async (updated) => {
+    setBanks(updated);
+    await authFetch(`${API}/admin/settings/banks/list`, {
+      method: 'PUT', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ office_id: settingsOfficeId, value: updated })
+    });
+    toast('✅ Bank list updated');
+  };
+
+  const saveChannels = async (updated) => {
+    setChannels(updated);
+    await authFetch(`${API}/admin/settings/notifications/channels`, {
+      method: 'PUT', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ office_id: settingsOfficeId, value: updated })
+    });
+    toast('✅ Notification channels updated');
+  };
+
+  const handleAddUser = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await authFetch(`${API}/admin/users`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(newUser)
+      });
+      const data = await res.json().catch(()=>({}));
+      if (!res.ok) throw new Error(data.error||'Failed to create user');
+      setShowAddUser(false);
+      setNewUser({ username:'', email:'', full_name:'', role:'viewer', office_id:'' });
+      loadUsers();
+      if (data.email_warning) {
+        toast(`⚠️ User created, but the invite email failed: ${data.email_warning}`);
+      } else {
+        toast('✅ Invite sent — they\'ll set their own password from the link');
+      }
+    } catch (err) { alert('Error: ' + err.message); }
+  };
+
+  const handleEditUser = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await authFetch(`${API}/admin/users/${editingUser.id}`, {
+        method: 'PATCH', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ full_name: editingUser.full_name, email: editingUser.email, role: editingUser.role, office_id: editingUser.office_id })
+      });
+      if (!res.ok) { const d = await res.json().catch(()=>({})); throw new Error(d.error||'Failed to update user'); }
+      setEditingUser(null);
+      loadUsers();
+      toast('✅ User updated');
+    } catch (err) { alert('Error: ' + err.message); }
+  };
+
+  const handleDeleteUser = async (u) => {
+    if (!window.confirm(`Delete ${u.full_name} (${u.username})? This can't be undone.`)) return;
+    try {
+      const res = await authFetch(`${API}/admin/users/${u.id}`, { method: 'DELETE' });
+      if (!res.ok) { const d = await res.json().catch(()=>({})); throw new Error(d.error||'Failed to delete user'); }
+      loadUsers();
+      toast('✅ User deleted');
+    } catch (err) { alert('Error: ' + err.message); }
+  };
+
+  const handleResendInvite = async (u) => {
+    try {
+      const res = await authFetch(`${API}/admin/users/${u.id}/resend-invite`, { method: 'POST' });
+      const d = await res.json().catch(()=>({}));
+      if (!res.ok) throw new Error(d.error||'Failed to resend invite');
+      toast('✅ Invite resent');
+    } catch (err) { alert('Error: ' + err.message); }
+  };
+
+  const handleResetPw = async (userId) => {
+    if (!newPw || newPw.length < 8) { alert('Password must be at least 8 characters'); return; }
+    await authFetch(`${API}/admin/users/${userId}/reset-password`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ new_password: newPw })
+    });
+    setPwResetFor(null); setNewPw('');
+    toast('✅ Password reset');
+  };
+
+  const toggleUserActive = async (u) => {
+    await authFetch(`${API}/admin/users/${u.id}`, {
+      method: 'PATCH', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ is_active: !u.is_active })
+    });
+    loadUsers();
+  };
+
+  const handleAvatarChange = (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    if (file.size > 1_500_000) { alert('Photo is too large — pick one under ~1.5MB'); return; }
+    const reader = new FileReader();
+    reader.onload = ev => setAvatarPreview(ev.target.result);
+    reader.readAsDataURL(file);
+  };
+
+  const handleProfileSave = async (e) => {
+    e.preventDefault();
+    setProfileSaving(true);
+    try {
+      const body = { ...profileForm };
+      if (avatarPreview !== user.avatar_url) body.avatar_url = avatarPreview;
+      const res = await authFetch(`${API}/auth/me`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Update failed');
+      onProfileSaved(data.user);
+      toast(profileForm.username !== user.username ? '✅ Profile updated — use your new username next time you log in' : '✅ Profile updated');
+    } catch (err) { alert('Error: ' + err.message); }
+    finally { setProfileSaving(false); }
+  };
+
+  const handlePasswordChange = async (e) => {
+    e.preventDefault();
+    setPwError('');
+    if (pwForm.new_password.length < 8) { setPwError('New password must be at least 8 characters'); return; }
+    if (pwForm.new_password !== pwForm.confirm) { setPwError("New passwords don't match"); return; }
+    setPwSaving(true);
+    try {
+      const res = await authFetch(`${API}/auth/change-password`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ current_password: pwForm.current_password, new_password: pwForm.new_password })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not change password');
+      setPwForm({ current_password:'', new_password:'', confirm:'' });
+      toast('✅ Password changed');
+    } catch (err) { setPwError(err.message); }
+    finally { setPwSaving(false); }
+  };
+
+  const sendTest = async (channel) => {
+    const target = channel === 'email' ? testEmail : testPhone;
+    if (!target) { alert(channel === 'email' ? 'Enter an email to test' : 'Enter a WhatsApp number to test'); return; }
+    setTestingChannel(channel);
+    try {
+      const path = channel === 'email' ? 'test-email' : 'test-sms';
+      const body = channel === 'email' ? { email: target } : { phone: target };
+      const res = await authFetch(`${API}/notifications/${path}`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Send failed');
+      toast(data.mode === 'mock' ? `⚠️ Sent in mock mode — ${channel === 'email' ? 'RESEND_API_KEY' : 'Twilio credentials'} not configured on the server` : `✅ Test ${channel} sent`);
+    } catch (err) { alert('Error: ' + err.message); }
+    finally { setTestingChannel(null); }
+  };
+
+  return (
+    <div className="content">
+      <div className="section">
+        <div style={{display:'flex',gap:'8px',marginBottom:'20px',borderBottom:'1.5px solid var(--border)',paddingBottom:'12px'}}>
+          <button className={`filter-btn ${tab==='profile'?'active':''}`} onClick={()=>setTab('profile')}>🙋 Profile</button>
+          {user.role === 'admin' && (
+            <button className={`filter-btn ${tab==='users'?'active':''}`} onClick={()=>setTab('users')}>👤 Users</button>
+          )}
+          <button className={`filter-btn ${tab==='banks'?'active':''}`} onClick={()=>setTab('banks')}>🏦 Banks</button>
+          <button className={`filter-btn ${tab==='notifications'?'active':''}`} onClick={()=>setTab('notifications')}>🔔 Notification Channels</button>
+          {user.role !== 'viewer' && (
+            <button className={`filter-btn ${tab==='emailTemplates'?'active':''}`} onClick={()=>setTab('emailTemplates')}>✉️ Email Templates</button>
+          )}
+          {user.role === 'admin' && (
+            <button className={`filter-btn ${tab==='audit'?'active':''}`} onClick={()=>setTab('audit')}>📋 Audit Log</button>
+          )}
+        </div>
+
+        {tab === 'profile' && (
+          <>
+            <h3 className="section-title" style={{marginBottom:'16px'}}>Your Profile</h3>
+            <form onSubmit={handleProfileSave} className="card-form" style={{maxWidth:'420px'}}>
+              <div style={{display:'flex',alignItems:'center',gap:'14px',marginBottom:'4px'}}>
+                <div onClick={()=>avatarFileInput.current.click()} title="Click to change photo"
+                  style={{width:'56px',height:'56px',borderRadius:'50%',background:avatarPreview?`url(${avatarPreview})`:'var(--accent)',backgroundSize:'cover',backgroundPosition:'center',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:700,fontSize:'20px',cursor:'pointer',flexShrink:0}}>
+                  {!avatarPreview && profileForm.full_name.charAt(0)}
+                </div>
+                <div>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={()=>avatarFileInput.current.click()}>Change Photo</button>
+                  <input ref={avatarFileInput} type="file" accept="image/*" style={{display:'none'}} onChange={handleAvatarChange}/>
+                </div>
+              </div>
+              <div className="form-group"><label>Display Name</label>
+                <input value={profileForm.full_name} onChange={e=>setProfileForm(f=>({...f,full_name:e.target.value}))} required/>
+              </div>
+              <div className="form-group"><label>Username</label>
+                <input value={profileForm.username} onChange={e=>setProfileForm(f=>({...f,username:e.target.value}))} required minLength={3}/>
+              </div>
+              <div className="form-actions" style={{justifyContent:'flex-start'}}>
+                <button type="submit" className="btn btn-primary" disabled={profileSaving}>{profileSaving?'Saving...':'Save Changes'}</button>
+              </div>
+            </form>
+
+            <div style={{borderTop:'1px solid var(--border)',margin:'24px 0 16px',paddingTop:'20px',maxWidth:'420px'}}>
+              <h3 className="section-title" style={{marginBottom:'12px'}}>Change Password</h3>
+              <form onSubmit={handlePasswordChange} className="card-form">
+                {pwError && <div className="login-error">⚠️ {pwError}</div>}
+                <div className="form-group"><label>Current Password</label>
+                  <input type="password" value={pwForm.current_password} onChange={e=>setPwForm(f=>({...f,current_password:e.target.value}))} required/>
+                </div>
+                <div className="form-group"><label>New Password</label>
+                  <input type="password" value={pwForm.new_password} onChange={e=>setPwForm(f=>({...f,new_password:e.target.value}))} required minLength={8}/>
+                </div>
+                <div className="form-group"><label>Confirm New Password</label>
+                  <input type="password" value={pwForm.confirm} onChange={e=>setPwForm(f=>({...f,confirm:e.target.value}))} required minLength={8}/>
+                </div>
+                <div className="form-actions" style={{justifyContent:'flex-start'}}>
+                  <button type="submit" className="btn btn-primary" disabled={pwSaving}>{pwSaving?'Updating...':'Update Password'}</button>
+                </div>
+              </form>
+            </div>
+
+            <p style={{fontSize:'11.5px',color:'var(--text-faint)',lineHeight:1.5,maxWidth:'420px'}}>
+              Your session stays active for 12 hours after login, then you'll need to sign in again. Email-verified password changes (OTP) aren't built yet — flagged as a separate follow-up, not forgotten.
+            </p>
+          </>
+        )}
+
+        {tab === 'users' && user.role === 'admin' && (
+          <>
+            <div className="section-header" style={{marginBottom:'16px'}}>
+              <h3 className="section-title">Users</h3>
+              <button className="btn btn-primary btn-sm" onClick={()=>setShowAddUser(true)}>+ Add User</button>
+            </div>
+            <div className="txn-table-wrap">
+              <table className="txn-table">
+                <thead><tr><th>Username</th><th>Name</th><th>Email</th><th>Role</th><th>Office</th><th>Status</th><th></th></tr></thead>
+                <tbody>
+                  {users.map(u => (
+                    <tr key={u.id} className="txn-table-row">
+                      <td>{u.username}</td>
+                      <td>{u.full_name}</td>
+                      <td style={{fontSize:'12px',color:'var(--text-muted)'}}>{u.email || '—'}</td>
+                      <td><span className="type-badge charge">{u.role}</span></td>
+                      <td>{u.office_name || 'All offices'}</td>
+                      <td>
+                        {u.pending_invite ? (
+                          <span className="notif-status failed" title="Hasn't set a password yet">Pending</span>
+                        ) : (
+                          <button className="btn btn-ghost btn-sm" onClick={()=>toggleUserActive(u)}>
+                            {u.is_active ? '✅ Active' : '⛔ Disabled'}
+                          </button>
+                        )}
+                      </td>
+                      <td style={{whiteSpace:'nowrap'}}>
+                        {pwResetFor === u.id ? (
+                          <div style={{display:'flex',gap:'6px'}}>
+                            <input type="password" placeholder="New password" value={newPw} onChange={e=>setNewPw(e.target.value)} className="txn-inline-input" style={{width:'130px'}}/>
+                            <button className="btn btn-primary btn-sm" onClick={()=>handleResetPw(u.id)}>Save</button>
+                            <button className="btn btn-ghost btn-sm" onClick={()=>{setPwResetFor(null);setNewPw('');}}>✕</button>
+                          </div>
+                        ) : (
+                          <div style={{display:'flex',gap:'4px'}}>
+                            <button className="icon-btn" title="Edit" onClick={()=>setEditingUser({...u})}>✏️</button>
+                            {u.pending_invite && (
+                              <button className="icon-btn" title="Resend invite" onClick={()=>handleResendInvite(u)}>✉️</button>
+                            )}
+                            {!u.pending_invite && (
+                              <button className="btn btn-ghost btn-sm" onClick={()=>setPwResetFor(u.id)}>Reset password</button>
+                            )}
+                            <button className="icon-btn danger" title="Delete" onClick={()=>handleDeleteUser(u)}>🗑️</button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        {(tab === 'banks' || tab === 'notifications') && (
+          <>
+            {user.role === 'admin' && (
+              <div className="form-group" style={{maxWidth:'280px',marginBottom:'16px'}}>
+                <label>Office</label>
+                <select value={settingsOfficeId} onChange={e=>setSettingsOfficeId(e.target.value)}>
+                  {offices.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}
+                </select>
+              </div>
+            )}
+
+            {tab === 'banks' && (
+              <>
+                <h3 className="section-title">Bank List — {offices.find(o=>o.id===Number(settingsOfficeId))?.name}</h3>
+                <p style={{color:'var(--text-muted)',fontSize:'13px',marginBottom:'16px'}}>These are the banks that appear in the "Add Card" dropdown for this office.</p>
+                <div style={{display:'flex',flexWrap:'wrap',gap:'8px',marginBottom:'16px'}}>
+                  {banks.map(b => (
+                    <span key={b} className="bank-pill" style={{display:'flex',alignItems:'center',gap:'6px',background:'var(--bg-3)',padding:'6px 10px',borderRadius:'8px'}}>
+                      {b}
+                      <button onClick={()=>saveBanks(banks.filter(x=>x!==b))} className="icon-btn danger" style={{padding:'2px 4px'}}>✕</button>
+                    </span>
+                  ))}
+                </div>
+                <div style={{display:'flex',gap:'8px'}}>
+                  <input value={newBank} onChange={e=>setNewBank(e.target.value)} placeholder="Add a bank name" className="txn-inline-input" style={{flex:1}}/>
+                  <button className="btn btn-primary btn-sm" onClick={()=>{ if(newBank.trim()){ saveBanks([...banks, newBank.trim()]); setNewBank(''); } }}>Add</button>
+                </div>
+              </>
+            )}
+
+            {tab === 'notifications' && (
+              <>
+                <h3 className="section-title">Notification Channels — {offices.find(o=>o.id===Number(settingsOfficeId))?.name}</h3>
+                <p style={{color:'var(--text-muted)',fontSize:'13px',marginBottom:'16px'}}>Cards need a WhatsApp number and/or alert email set individually — this controls which channels the office sends on.</p>
+                <div style={{display:'flex',flexDirection:'column',gap:'12px'}}>
+                  <label style={{display:'flex',alignItems:'center',gap:'10px',cursor:'pointer'}}>
+                    <input type="checkbox" checked={channels.whatsapp} onChange={e=>saveChannels({...channels, whatsapp:e.target.checked})}/>
+                    📱 WhatsApp (via Twilio)
+                  </label>
+                  <div style={{display:'flex',gap:'8px',marginLeft:'26px'}}>
+                    <input value={testPhone} onChange={e=>setTestPhone(e.target.value)} placeholder="+971501234567" className="txn-inline-input" style={{width:'180px'}}/>
+                    <button className="btn btn-ghost btn-sm" onClick={()=>sendTest('whatsapp')} disabled={testingChannel==='whatsapp'}>
+                      {testingChannel==='whatsapp' ? 'Sending...' : 'Send test'}
+                    </button>
+                  </div>
+                  <label style={{display:'flex',alignItems:'center',gap:'10px',cursor:'pointer'}}>
+                    <input type="checkbox" checked={channels.email} onChange={e=>saveChannels({...channels, email:e.target.checked})}/>
+                    ✉️ Email (via Resend)
+                  </label>
+                  <div style={{display:'flex',gap:'8px',marginLeft:'26px'}}>
+                    <input value={testEmail} onChange={e=>setTestEmail(e.target.value)} placeholder="you@cat-cons.com" className="txn-inline-input" style={{width:'220px'}}/>
+                    <button className="btn btn-ghost btn-sm" onClick={()=>sendTest('email')} disabled={testingChannel==='email'}>
+                      {testingChannel==='email' ? 'Sending...' : 'Send test'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </>
+        )}
+
+        {tab === 'emailTemplates' && user.role !== 'viewer' && (
+          <>
+            <div className="form-group" style={{maxWidth:'280px',marginBottom:'16px'}}>
+              <label>Office</label>
+              <select value={settingsOfficeId} onChange={e=>setSettingsOfficeId(e.target.value)}>
+                {offices.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}
+              </select>
+            </div>
+
+            <div style={{display:'flex',gap:'8px',marginBottom:'18px',flexWrap:'wrap'}}>
+              {templates.map(t => (
+                <button key={t.key} className={`filter-btn ${selectedTemplateKey===t.key?'active':''}`} onClick={()=>setSelectedTemplateKey(t.key)}>
+                  {t.key === 'invite' && 'Invite'}
+                  {t.key === 'due_reminder' && 'Due Reminder'}
+                  {t.key === 'billing_reminder' && 'Billing Reminder'}
+                  {t.key === 'test' && 'Test Email'}
+                  {t.is_customized && ' •'}
+                </button>
+              ))}
+            </div>
+
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'20px'}}>
+              <div>
+                <div className="form-group" style={{marginBottom:'12px'}}>
+                  <label>Subject</label>
+                  <input value={templateDraft.subject} onChange={e=>setTemplateDraft(f=>({...f,subject:e.target.value}))}/>
+                </div>
+                <div className="form-group" style={{marginBottom:'12px'}}>
+                  <label>Body (HTML)</label>
+                  <textarea
+                    value={templateDraft.body}
+                    onChange={e=>setTemplateDraft(f=>({...f,body:e.target.value}))}
+                    style={{width:'100%',minHeight:'280px',fontFamily:"'IBM Plex Mono',monospace",fontSize:'12px',padding:'12px',border:'1.5px solid var(--border)',borderRadius:'8px',resize:'vertical'}}
+                  />
+                </div>
+                <div style={{marginBottom:'14px'}}>
+                  <div style={{fontSize:'11px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'.3px',marginBottom:'6px'}}>Available Variables</div>
+                  <div style={{display:'flex',flexWrap:'wrap',gap:'6px'}}>
+                    {(templates.find(t=>t.key===selectedTemplateKey)?.variables||[]).map(v => (
+                      <code key={v} style={{background:'var(--bg-3)',padding:'3px 8px',borderRadius:'6px',fontSize:'11px'}}>{`{{${v}}}`}</code>
+                    ))}
+                  </div>
+                </div>
+                <div style={{display:'flex',gap:'8px'}}>
+                  <button className="btn btn-ghost btn-sm" onClick={handlePreviewTemplate} disabled={previewLoading}>{previewLoading?'Rendering...':'👁 Preview'}</button>
+                  <button className="btn btn-primary btn-sm" onClick={handleSaveTemplate} disabled={templateSaving}>{templateSaving?'Saving...':'Save Template'}</button>
+                  {templates.find(t=>t.key===selectedTemplateKey)?.is_customized && (
+                    <button className="btn btn-danger btn-sm" onClick={handleResetTemplate}>Reset to Default</button>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <div style={{fontSize:'11px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'.3px',marginBottom:'8px'}}>
+                  Live Preview {previewData ? '' : '(click Preview to render with sample data)'}
+                </div>
+                <div style={{border:'1.5px solid var(--border)',borderRadius:'8px',overflow:'hidden',minHeight:'380px',background:'#fff'}}>
+                  {previewData ? (
+                    <>
+                      <div style={{padding:'10px 14px',background:'var(--bg-3)',fontSize:'12px',borderBottom:'1px solid var(--border)'}}>
+                        <strong>Subject:</strong> {previewData.subject}
+                      </div>
+                      <iframe
+                        title="Email preview"
+                        srcDoc={previewData.html}
+                        style={{width:'100%',height:'420px',border:'none'}}
+                        sandbox=""
+                      />
+                    </>
+                  ) : (
+                    <div className="empty-state">No preview yet</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {tab === 'audit' && user.role === 'admin' && (
+          <>
+            <h3 className="section-title">Audit Log</h3>
+            <p style={{color:'var(--text-muted)',fontSize:'13px',marginBottom:'16px'}}>Who did what, when. Most recent 200 actions.</p>
+            {!auditLoaded ? (
+              <div className="empty-state">Loading...</div>
+            ) : auditLog.length === 0 ? (
+              <div className="empty-state">No audit entries yet.</div>
+            ) : (
+              <div className="txn-table-wrap">
+                <table className="txn-table">
+                  <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Details</th><th>Office</th></tr></thead>
+                  <tbody>
+                    {auditLog.map(entry => (
+                      <tr key={entry.id} className="txn-table-row">
+                        <td style={{whiteSpace:'nowrap',fontSize:'12px'}}>{new Date(entry.created_at).toLocaleString()}</td>
+                        <td>{entry.actor_name || '—'}</td>
+                        <td><span className="type-badge charge">{entry.action}</span></td>
+                        <td style={{fontSize:'11.5px',color:'var(--text-faint)',maxWidth:'260px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={entry.details ? JSON.stringify(entry.details) : ''}>
+                          {entry.entity_type}{entry.entity_id ? ` #${entry.entity_id}` : ''}{entry.details ? ` — ${JSON.stringify(entry.details).slice(0,80)}` : ''}
+                        </td>
+                        <td>{entry.office_name || 'Global'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {showAddUser && (
+        <div className="modal-overlay" onClick={()=>setShowAddUser(false)}>
+          <div className="modal modal-sm" onClick={e=>e.stopPropagation()}>
+            <div className="modal-header"><h2>➕ Add User</h2><button className="close-btn" onClick={()=>setShowAddUser(false)}>✕</button></div>
+            <p className="modal-desc">They'll get an email with a link to set their own password — nobody types it for them.</p>
+            <form onSubmit={handleAddUser} className="card-form">
+              <div className="form-group"><label>Full Name</label>
+                <input value={newUser.full_name} onChange={e=>setNewUser(f=>({...f,full_name:e.target.value}))} required/>
+              </div>
+              <div className="form-group"><label>Username</label>
+                <input value={newUser.username} onChange={e=>setNewUser(f=>({...f,username:e.target.value}))} required/>
+              </div>
+              <div className="form-group"><label>Email</label>
+                <input type="email" value={newUser.email} onChange={e=>setNewUser(f=>({...f,email:e.target.value}))} placeholder="name@cat-cons.com" required/>
+              </div>
+              <div className="form-group"><label>Role</label>
+                <select value={newUser.role} onChange={e=>setNewUser(f=>({...f,role:e.target.value}))}>
+                  <option value="viewer">Viewer</option>
+                  <option value="manager">Manager</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              {newUser.role !== 'admin' && (
+                <div className="form-group"><label>Office</label>
+                  <select value={newUser.office_id} onChange={e=>setNewUser(f=>({...f,office_id:e.target.value}))} required>
+                    <option value="">Select Office</option>
+                    {offices.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}
+                  </select>
+                </div>
+              )}
+              <div className="form-actions">
+                <button type="button" className="btn btn-ghost" onClick={()=>setShowAddUser(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary">Send Invite</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {editingUser && (
+        <div className="modal-overlay" onClick={()=>setEditingUser(null)}>
+          <div className="modal modal-sm" onClick={e=>e.stopPropagation()}>
+            <div className="modal-header"><h2>✏️ Edit User</h2><button className="close-btn" onClick={()=>setEditingUser(null)}>✕</button></div>
+            <form onSubmit={handleEditUser} className="card-form">
+              <div className="form-group"><label>Full Name</label>
+                <input value={editingUser.full_name} onChange={e=>setEditingUser(f=>({...f,full_name:e.target.value}))} required/>
+              </div>
+              <div className="form-group"><label>Email</label>
+                <input type="email" value={editingUser.email||''} onChange={e=>setEditingUser(f=>({...f,email:e.target.value}))}/>
+              </div>
+              <div className="form-group"><label>Role</label>
+                <select value={editingUser.role} onChange={e=>setEditingUser(f=>({...f,role:e.target.value}))}>
+                  <option value="viewer">Viewer</option>
+                  <option value="manager">Manager</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              {editingUser.role !== 'admin' && (
+                <div className="form-group"><label>Office</label>
+                  <select value={editingUser.office_id||''} onChange={e=>setEditingUser(f=>({...f,office_id:e.target.value}))} required>
+                    <option value="">Select Office</option>
+                    {offices.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}
+                  </select>
+                </div>
+              )}
+              <div className="form-actions">
+                <button type="button" className="btn btn-ghost" onClick={()=>setEditingUser(null)}>Cancel</button>
+                <button type="submit" className="btn btn-primary">Save Changes</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Profile Modal ──────────────────────────────────────────
+function ProfileModal({ user, onClose, onSaved, toast }) {
+  const [form, setForm] = useState({ full_name: user.full_name, username: user.username });
+  const [avatarPreview, setAvatarPreview] = useState(user.avatar_url || null);
+  const [saving, setSaving] = useState(false);
+  const [pwForm, setPwForm] = useState({ current_password:'', new_password:'', confirm:'' });
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwError, setPwError] = useState('');
+  const fileInput = useRef();
+
+  const handlePhotoChange = (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    if (file.size > 1_500_000) { alert('Photo is too large — pick one under ~1.5MB'); return; }
+    const reader = new FileReader();
+    reader.onload = ev => setAvatarPreview(ev.target.result);
+    reader.readAsDataURL(file);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const body = { ...form };
+      if (avatarPreview !== user.avatar_url) body.avatar_url = avatarPreview;
+      const res = await authFetch(`${API}/auth/me`, {
+        method: 'PATCH', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Update failed');
+      onSaved(data.user);
+      toast(form.username !== user.username
+        ? '✅ Profile updated — log out and back in with your new username next time'
+        : '✅ Profile updated');
+    } catch (err) { alert('Error: ' + err.message); }
+    finally { setSaving(false); }
+  };
+
+  const handlePasswordChange = async (e) => {
+    e.preventDefault();
+    setPwError('');
+    if (pwForm.new_password.length < 8) { setPwError('New password must be at least 8 characters'); return; }
+    if (pwForm.new_password !== pwForm.confirm) { setPwError("New passwords don't match"); return; }
+    setPwSaving(true);
+    try {
+      const res = await authFetch(`${API}/auth/change-password`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ current_password: pwForm.current_password, new_password: pwForm.new_password })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not change password');
+      setPwForm({ current_password:'', new_password:'', confirm:'' });
+      toast('✅ Password changed');
+    } catch (err) { setPwError(err.message); }
+    finally { setPwSaving(false); }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal modal-sm" onClick={e=>e.stopPropagation()}>
+        <div className="modal-header"><h2>👤 Edit Profile</h2><button className="close-btn" onClick={onClose}>✕</button></div>
+
+        <form onSubmit={handleSubmit} className="card-form">
+          <div style={{display:'flex',alignItems:'center',gap:'14px',marginBottom:'4px'}}>
+            <div onClick={()=>fileInput.current.click()} title="Click to change photo"
+              style={{width:'56px',height:'56px',borderRadius:'50%',background:avatarPreview?`url(${avatarPreview})`:'var(--accent)',backgroundSize:'cover',backgroundPosition:'center',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:700,fontSize:'20px',cursor:'pointer',flexShrink:0}}>
+              {!avatarPreview && form.full_name.charAt(0)}
+            </div>
+            <div>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={()=>fileInput.current.click()}>Change Photo</button>
+              <input ref={fileInput} type="file" accept="image/*" style={{display:'none'}} onChange={handlePhotoChange}/>
+            </div>
+          </div>
+          <div className="form-group"><label>Display Name</label>
+            <input value={form.full_name} onChange={e=>setForm(f=>({...f,full_name:e.target.value}))} required/>
+          </div>
+          <div className="form-group"><label>Username</label>
+            <input value={form.username} onChange={e=>setForm(f=>({...f,username:e.target.value}))} required minLength={3}/>
+          </div>
+          <div className="form-actions">
+            <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>{saving?'Saving...':'Save Changes'}</button>
+          </div>
+        </form>
+
+        <div style={{borderTop:'1px solid var(--border)',margin:'20px 0 16px',paddingTop:'16px'}}>
+          <h3 style={{fontSize:'13px',fontWeight:700,marginBottom:'12px',color:'var(--text)'}}>Change Password</h3>
+          <form onSubmit={handlePasswordChange} className="card-form">
+            {pwError && <div className="login-error">⚠️ {pwError}</div>}
+            <div className="form-group"><label>Current Password</label>
+              <input type="password" value={pwForm.current_password} onChange={e=>setPwForm(f=>({...f,current_password:e.target.value}))} required/>
+            </div>
+            <div className="form-group"><label>New Password</label>
+              <input type="password" value={pwForm.new_password} onChange={e=>setPwForm(f=>({...f,new_password:e.target.value}))} required minLength={8}/>
+            </div>
+            <div className="form-group"><label>Confirm New Password</label>
+              <input type="password" value={pwForm.confirm} onChange={e=>setPwForm(f=>({...f,confirm:e.target.value}))} required minLength={8}/>
+            </div>
+            <div className="form-actions">
+              <button type="submit" className="btn btn-primary" disabled={pwSaving}>{pwSaving?'Updating...':'Update Password'}</button>
+            </div>
+          </form>
+        </div>
+
+        <p style={{fontSize:'11.5px',color:'var(--text-faint)',lineHeight:1.5}}>
+          Your session stays active for 12 hours after login, then you'll need to sign in again. There's no multi-device session list yet — that's a bigger feature, flag it if you need it.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─── CSV Export ─────────────────────────────────────────────
+// Proper CSV: quoted fields, commas/quotes escaped, opens cleanly in Excel/Sheets.
+function toCSV(headers, rows) {
+  const esc = (v) => {
+    const s = String(v ?? '');
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
+  };
+  return [headers.map(esc).join(','), ...rows.map(r => r.map(esc).join(','))].join('\r\n');
+}
+function downloadCSV(csv, filename) {
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })),
+    download: filename
+  });
   a.click();
 }
 
+function exportStatement(card, transactions) {
+  const txns = transactions.filter(t => t.card_id === card.id || t.card_number === card.card_number);
+  const symbol = getCountry().symbol;
+
+  const summary = toCSV(
+    ['Field', 'Value'],
+    [
+      ['Bank', card.bank_name], ['Card', maskCard(card.card_number)], ['Holder', card.holder_name],
+      ['Credit Limit', `${symbol} ${card.credit_limit.toLocaleString()}`],
+      ['Outstanding', `${symbol} ${card.outstanding_balance.toLocaleString()}`],
+      ['Available', `${symbol} ${(card.credit_limit - card.outstanding_balance).toLocaleString()}`],
+      ['Billing Date', `${card.billing_date}th`], ['Due Date', `${card.due_date}th`],
+      ['Generated', new Date().toLocaleString()]
+    ]
+  );
+  const txnCSV = toCSV(
+    ['Date', 'Description', 'Type', 'Amount'],
+    txns.map(t => [new Date(t.transaction_date).toLocaleDateString(), t.description || '', t.type, t.amount])
+  );
+
+  downloadCSV(summary + '\r\n\r\n' + txnCSV, `${card.bank_name.replace(/\s+/g,'_')}_statement_${new Date().toISOString().slice(0,10)}.csv`);
+}
+
+// Full transaction list, respecting whatever filters are currently applied on the Transactions tab
+function exportTransactions(transactions, label) {
+  const csv = toCSV(
+    ['Date', 'Bank', 'Card', 'Description', 'Type', 'Amount'],
+    transactions.map(t => [
+      new Date(t.transaction_date).toLocaleDateString(),
+      t.bank_name || '', `****${t.card_number ? t.card_number.slice(-4) : ''}`,
+      t.description || '', t.type, t.amount
+    ])
+  );
+  downloadCSV(csv, `transactions_${label}_${new Date().toISOString().slice(0,10)}.csv`);
+}
+
 // ─── Main App ─────────────────────────────────────────────────
+// ─── Accept Invite Page ─────────────────────────────────────
+function AcceptInvitePage({ token }) {
+  const [loading, setLoading] = useState(true);
+  const [invitee, setInvitee] = useState(null);
+  const [error, setError] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    fetch(`${API}/auth/invite/${token}`).then(r=>r.json()).then(data => {
+      if (data.error) setError(data.error);
+      else setInvitee(data);
+    }).catch(() => setError('Could not reach the server.'))
+      .finally(() => setLoading(false));
+  }, [token]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (password.length < 8) { setError('Password must be at least 8 characters'); return; }
+    if (password !== confirm) { setError("Passwords don't match"); return; }
+    setSubmitting(true); setError('');
+    try {
+      const res = await fetch(`${API}/auth/accept-invite`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ token, password })
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || 'Something went wrong'); return; }
+      setDone(true);
+    } catch (err) { setError('Could not reach the server.'); }
+    finally { setSubmitting(false); }
+  };
+
+  return (
+    <div className="login-page">
+      <div className="login-right">
+        <div className="login-form-wrap">
+          <div className="login-brand">
+            <div className="login-logo-wrap"><CardMark size={26}/></div>
+            <div className="login-brand-name">CC Manager</div>
+            <div className="login-brand-sub">Executive Credit Card Dashboard</div>
+          </div>
+          {loading ? (
+            <div className="login-subtitle">Checking your invite...</div>
+          ) : done ? (
+            <>
+              <div className="login-title">Password set</div>
+              <div className="login-subtitle">You're all set — you can log in now.</div>
+              <a className="btn btn-primary btn-full" href="/login">Go to login</a>
+            </>
+          ) : invitee ? (
+            <>
+              <div className="login-title">Hi, {invitee.full_name}</div>
+              <div className="login-subtitle">Set a password to activate your account ({invitee.username}).</div>
+              <form className="login-form" onSubmit={handleSubmit}>
+                {error && <div className="login-error">⚠️ {error}</div>}
+                <div className="login-field">
+                  <label>New Password</label>
+                  <input className="login-input" type="password" value={password} onChange={e=>setPassword(e.target.value)} minLength={8} required autoFocus/>
+                </div>
+                <div className="login-field">
+                  <label>Confirm Password</label>
+                  <input className="login-input" type="password" value={confirm} onChange={e=>setConfirm(e.target.value)} minLength={8} required/>
+                </div>
+                <button type="submit" className="login-btn" disabled={submitting}>{submitting?'Setting up...':'Activate Account'}</button>
+              </form>
+            </>
+          ) : (
+            <>
+              <div className="login-title">Invite not valid</div>
+              <div className="login-error">⚠️ {error}</div>
+              <p className="login-hint">Ask an admin to resend your invite.</p>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
+  // Entry-point routing: an invite link loads the app fresh at this URL, and
+  // never navigates away from it without a full page reload — so it's safe
+  // to branch before the rest of the app's hooks below.
+  if (window.location.pathname === '/accept-invite') {
+    const token = new URLSearchParams(window.location.search).get('token');
+    return <AcceptInvitePage token={token} />;
+  }
   const [user, setUser] = useState(() => {
-    try { const s = sessionStorage.getItem('cc_user'); return s ? JSON.parse(s) : null; } catch { return null; }
+    try { const s = localStorage.getItem('cc_user'); return s ? JSON.parse(s) : null; } catch { return null; }
   });
   const [logo, setLogo] = useState(localStorage.getItem('cc_logo')||null);
-  const [countryKey, setCountry] = useState(localStorage.getItem('cc_country')||'UAE');
-  const switchCountry = (key) => { setCountryKey(key); setCountry(key); };
-  const fmt = (val) => fmtCurrency(val, countryKey);
+  const [offices, setOffices] = useState([]);
+  const [bankLists, setBankLists] = useState({}); // { officeId: [bankNames] }
+  const [selectedOfficeId, setSelectedOfficeId] = useState(null); // admin: null = all offices
   const [dashboard,setDashboard]=useState(null);
   const [transactions,setTransactions]=useState([]);
   const [notifications,setNotifications]=useState([]);
   const [analytics,setAnalytics]=useState(null);
-  const [activeTab,setActiveTab]=useState('overview');
+  const VALID_TABS = ['overview','cards','transactions','analytics','notifications','settings'];
+  const [activeTab,setActiveTab]=useState(() => {
+    const fromUrl = window.location.pathname.slice(1);
+    return VALID_TABS.includes(fromUrl) ? fromUrl : 'overview';
+  });
   const [showCardModal,setShowCardModal]=useState(false);
   const [editCard,setEditCard]=useState(null);
+  const [replacingCard,setReplacingCard]=useState(null);
   const [showTxnModal,setShowTxnModal]=useState(false);
   const [showRecommend,setShowRecommend]=useState(false);
+  const [mobileNavOpen,setMobileNavOpen]=useState(false);
   const [selectedCard,setSelectedCard]=useState(null);
   const [loading,setLoading]=useState(true);
   const [txnFilter,setTxnFilter]=useState('all');
@@ -645,8 +1550,14 @@ export default function App() {
   const logoInput=useRef();
 
   const toast=msg=>{setToastMsg(msg);setTimeout(()=>setToastMsg(''),3000);};
-  const handleLogin = (u) => { sessionStorage.setItem('cc_user', JSON.stringify(u)); setUser(u); };
-  const handleLogout = () => { sessionStorage.removeItem('cc_user'); setUser(null); };
+
+  const handleLogin = (u, token) => {
+    setToken(token);
+    localStorage.setItem('cc_user', JSON.stringify(u));
+    setUser(u);
+    setSelectedOfficeId(u.role === 'admin' ? null : u.office_id);
+  };
+  const handleLogout = () => { setToken(null); localStorage.removeItem('cc_user'); setUser(null); };
 
   const handleLogoUpload=e=>{
     const file=e.target.files[0]; if(!file) return;
@@ -655,44 +1566,111 @@ export default function App() {
     reader.readAsDataURL(file);
   };
 
+  // Office param appended to every scoped API call
+  const officeParam = selectedOfficeId ? `&office_id=${selectedOfficeId}` : '';
+  const officeParamQ = selectedOfficeId ? `?office_id=${selectedOfficeId}` : '';
+
+  // Load offices + bank lists once, right after login
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const [offs, settingsRows] = await Promise.all([
+          authFetch(`${API}/admin/offices`).then(r=>r.json()),
+          authFetch(`${API}/admin/settings?category=banks`).then(r=>r.json()),
+        ]);
+        setOffices(offs);
+        const map = {};
+        settingsRows.forEach(row => { if (row.key === 'list' && row.office_id) map[row.office_id] = row.value; });
+        setBankLists(map);
+
+        const activeOfficeId = user.role === 'admin' ? (selectedOfficeId || offs[0]?.id) : user.office_id;
+        const activeOffice = offs.find(o => o.id === activeOfficeId);
+        if (activeOffice) setOfficeConfig(activeOffice);
+      } catch (err) { console.error('Failed to load offices/settings', err); }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  // Keep the currency/locale config in sync whenever the admin switches office
+  useEffect(() => {
+    if (!offices.length) return;
+    const activeOfficeId = user?.role === 'admin' ? selectedOfficeId : user?.office_id;
+    const activeOffice = offices.find(o => o.id === activeOfficeId) || offices[0];
+    if (activeOffice) setOfficeConfig(activeOffice);
+  }, [selectedOfficeId, offices, user]);
+
+  const [refreshing, setRefreshing] = useState(false);
+  const [txnTotal, setTxnTotal] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
   const loadDashboard=useCallback(async()=>{
+    if (!user) return;
+    setRefreshing(true);
     try{
-      const [dash,txns,notifs,anal]=await Promise.all([
-        fetch(`${API}/dashboard`).then(r=>r.json()),
-        fetch(`${API}/transactions?limit=50`).then(r=>r.json()),
-        fetch(`${API}/notifications`).then(r=>r.json()),
-        fetch(`${API}/analytics/spending`).then(r=>r.json()).catch(()=>null),
+      const [dash,txnsRes,notifs,anal]=await Promise.all([
+        authFetch(`${API}/dashboard${officeParamQ}`).then(r=>r.json()),
+        authFetch(`${API}/transactions?limit=200&offset=0${officeParam}`).then(r=>r.json()),
+        authFetch(`${API}/notifications${officeParamQ}`).then(r=>r.json()),
+        authFetch(`${API}/analytics/spending${officeParamQ}`).then(r=>r.json()).catch(()=>null),
       ]);
       setDashboard(dash);
-      setTransactions(Array.isArray(txns)?txns:[]);
+      setTransactions(Array.isArray(txnsRes?.transactions)?txnsRes.transactions:[]);
+      setTxnTotal(txnsRes?.total || 0);
       setNotifications(Array.isArray(notifs)?notifs:[]);
       setAnalytics(anal);
     }catch(err){console.error(err);}
-    finally{setLoading(false);}
-  },[]);
+    finally{setLoading(false); setRefreshing(false);}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[user, selectedOfficeId]);
+
+  const loadMoreTransactions = async () => {
+    setLoadingMore(true);
+    try {
+      const res = await authFetch(`${API}/transactions?limit=200&offset=${transactions.length}${officeParam}`).then(r=>r.json());
+      setTransactions(prev => [...prev, ...(res.transactions||[])]);
+    } catch(err) { console.error(err); }
+    finally { setLoadingMore(false); }
+  };
 
   useEffect(()=>{ if(user) loadDashboard(); },[user,loadDashboard]);
 
+  // Sync the URL to whatever's actually on screen. Previously nothing ever
+  // called history.pushState/replaceState, so the address bar just stayed
+  // frozen at whatever path the page happened to load from.
+  useEffect(() => {
+    if (user) window.history.replaceState(null, '', `/${activeTab}`);
+  }, [activeTab, user]);
+  useEffect(() => {
+    if (!user) window.history.replaceState(null, '', '/login');
+  }, [user]);
+
   const handleDeleteTxn=async id=>{
     if(!window.confirm('Delete this transaction?')) return;
-    try{
-      await fetch(`${API}/transactions/${id}`,{method:'DELETE'});
-      loadDashboard(); toast('Transaction deleted.');
-    }catch(err){toast('❌ Delete failed');}
+    try{ await authFetch(`${API}/transactions/${id}`,{method:'DELETE'}); loadDashboard(); toast('Transaction deleted.'); }
+    catch(err){toast('❌ Delete failed');}
   };
 
   const handleDeleteCard=async id=>{
     if(!window.confirm('Delete this card and all its data?')) return;
-    await fetch(`${API}/cards/${id}`,{method:'DELETE'});
+    await authFetch(`${API}/cards/${id}`,{method:'DELETE'});
     setSelectedCard(null); loadDashboard(); toast('Card deleted.');
   };
 
   const handleTriggerNotifications=async()=>{
-    await fetch(`${API}/notifications/trigger`,{method:'POST'});
+    await authFetch(`${API}/notifications/trigger`,{method:'POST'});
     toast('✅ Notification check triggered!'); loadDashboard();
   };
 
-  // Show login if not authenticated
+  const handleRetryNotification = async (id) => {
+    try {
+      const res = await authFetch(`${API}/notifications/${id}/retry`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Retry failed');
+      toast(data.status === 'sent' ? '✅ Resent successfully' : '❌ Retry failed again — check the delivery config');
+      loadDashboard();
+    } catch (err) { alert('Error: ' + err.message); }
+  };
+
   if (!user) return <LoginPage onLogin={handleLogin} logo={logo} />;
 
   if (loading) return(
@@ -706,32 +1684,26 @@ export default function App() {
   const filteredTxns = transactions.filter(t => {
     if (txnFilter !== 'all' && t.type !== txnFilter) return false;
     if (txnCardFilter !== 'all' && String(t.card_id) !== String(txnCardFilter)) return false;
-    if (txnDateFrom) {
-      const from = new Date(txnDateFrom); from.setHours(0,0,0,0);
-      if (new Date(t.transaction_date) < from) return false;
-    }
-    if (txnDateTo) {
-      const to = new Date(txnDateTo); to.setHours(23,59,59,999);
-      if (new Date(t.transaction_date) > to) return false;
-    }
+    if (txnDateFrom) { const from = new Date(txnDateFrom); from.setHours(0,0,0,0); if (new Date(t.transaction_date) < from) return false; }
+    if (txnDateTo) { const to = new Date(txnDateTo); to.setHours(23,59,59,999); if (new Date(t.transaction_date) > to) return false; }
     return true;
   });
+
+  const isAdmin = user.role === 'admin';
+  const isGlobalAdmin = user.role === 'admin' && user.office_id === null;
 
   return(
     <div className="app">
       {toastMsg&&<div className="toast">{toastMsg}</div>}
 
-      {/* ── Sidebar ── */}
-      <aside className="sidebar">
+      <div className={`mobile-nav-overlay ${mobileNavOpen?'visible':''}`} onClick={()=>setMobileNavOpen(false)} />
+      <aside className={`sidebar ${mobileNavOpen?'mobile-open':''}`}>
         <div className="sidebar-top">
           <div className="sidebar-logo">
             <div className="logo-img-wrap" onClick={()=>logoInput.current.click()} title="Click to upload company logo" style={{cursor:'pointer'}}>
-              {logo?<img src={logo} alt="logo"/>:'◈'}
+              {logo?<img src={logo} alt="logo"/>:<CardMark size={20}/>}
             </div>
-            <div>
-              <div className="logo-title">CC Manager</div>
-              <div className="logo-sub">Executive Dashboard</div>
-            </div>
+            <div><div className="logo-title">CC Manager</div><div className="logo-sub">Executive Dashboard</div></div>
             <input ref={logoInput} type="file" accept="image/*" style={{display:'none'}} onChange={handleLogoUpload}/>
           </div>
         </div>
@@ -744,8 +1716,9 @@ export default function App() {
             {id:'transactions',icon:'↕',label:'Transactions'},
             {id:'analytics',icon:'📈',label:'Analytics'},
             {id:'notifications',icon:'🔔',label:'Alerts'},
+            {id:'settings',icon:'⚙️',label:'Settings'},
           ].map(item=>(
-            <button key={item.id} className={`nav-item ${activeTab===item.id?'active':''}`} onClick={()=>setActiveTab(item.id)}>
+            <button key={item.id} className={`nav-item ${activeTab===item.id?'active':''}`} onClick={()=>{setActiveTab(item.id);setMobileNavOpen(false);}}>
               <span className="nav-icon">{item.icon}</span>{item.label}
             </button>
           ))}
@@ -761,16 +1734,18 @@ export default function App() {
             <span className="nav-icon">🎯</span>Best Card Advisor
           </button>
           <button className="nav-item" onClick={handleTriggerNotifications}>
-            <span className="nav-icon">📱</span>Send SMS Alerts
+            <span className="nav-icon">📱</span>Send Alerts Now
           </button>
         </nav>
 
         <div className="sidebar-footer">
           <div className="sidebar-user">
-            <div className="sidebar-user-avatar">{user.name.charAt(0)}</div>
-            <div>
-              <div className="sidebar-user-name">{user.name}</div>
-              <div className="sidebar-user-role">{user.role}</div>
+            <div className="sidebar-user-avatar" style={user.avatar_url?{background:`url(${user.avatar_url})`,backgroundSize:'cover',backgroundPosition:'center'}:{}}>
+              {!user.avatar_url && user.full_name.charAt(0)}
+            </div>
+            <div style={{cursor:'pointer'}} onClick={()=>{setActiveTab('settings');setMobileNavOpen(false);}} title="Edit profile">
+              <div className="sidebar-user-name">{user.full_name}</div>
+              <div className="sidebar-user-role">{user.role} · {user.office_name || 'All offices'}</div>
             </div>
             <button className="sidebar-logout" onClick={handleLogout} title="Sign out">⏏</button>
           </div>
@@ -784,42 +1759,53 @@ export default function App() {
         </div>
       </aside>
 
-      {/* ── Main ── */}
-      <main className="main">
+      <main className="main" style={{opacity:refreshing?0.45:1, transition:'opacity .25s ease', pointerEvents:refreshing?'none':'auto'}}>
         <header className="top-bar">
-          <div>
+          <div style={{display:'flex',alignItems:'center'}}>
+            <button className="mobile-nav-toggle" onClick={()=>setMobileNavOpen(o=>!o)} aria-label="Toggle menu">☰</button>
+            <div>
             <h1 className="page-title">
               {activeTab==='overview'&&'Portfolio Overview'}
               {activeTab==='cards'&&'Credit Cards'}
               {activeTab==='transactions'&&'Transactions'}
               {activeTab==='analytics'&&'Spending Analytics'}
               {activeTab==='notifications'&&'Alert History'}
+              {activeTab==='settings'&&'Settings'}
             </h1>
             <p className="page-sub">{new Date().toLocaleDateString(getCountry().locale,{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</p>
+            </div>
           </div>
           <div style={{display:'flex',gap:'10px',alignItems:'center'}}>
-            {/* Country switcher */}
-            <div style={{display:'flex',alignItems:'center',gap:'6px',background:'var(--bg-3)',border:'1.5px solid var(--border)',borderRadius:'10px',padding:'6px 12px'}}>
-              {Object.entries(COUNTRIES).map(([key,cfg])=>(
-                <button key={key} onClick={()=>switchCountry(key)}
-                  style={{background:countryKey===key?'var(--accent)':'transparent',color:countryKey===key?'#fff':'var(--text-muted)',border:'none',borderRadius:'6px',padding:'4px 10px',fontSize:'12px',fontWeight:600,cursor:'pointer',transition:'all .15s',fontFamily:'inherit'}}>
-                  {cfg.label}
+            {isGlobalAdmin ? (
+              <div style={{display:'flex',alignItems:'center',gap:'6px',background:'var(--bg-3)',border:'1.5px solid var(--border)',borderRadius:'10px',padding:'6px 12px'}}>
+                <button onClick={()=>setSelectedOfficeId(null)}
+                  style={{background:!selectedOfficeId?'var(--accent)':'transparent',color:!selectedOfficeId?'#fff':'var(--text-muted)',border:'none',borderRadius:'6px',padding:'4px 10px',fontSize:'12px',fontWeight:600,cursor:'pointer'}}>
+                  All Offices
                 </button>
-              ))}
-            </div>
+                {offices.map(o=>(
+                  <button key={o.id} onClick={()=>setSelectedOfficeId(o.id)}
+                    style={{background:selectedOfficeId===o.id?'var(--accent)':'transparent',color:selectedOfficeId===o.id?'#fff':'var(--text-muted)',border:'none',borderRadius:'6px',padding:'4px 10px',fontSize:'12px',fontWeight:600,cursor:'pointer'}}>
+                    {o.name}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div style={{background:'var(--bg-3)',border:'1.5px solid var(--border)',borderRadius:'10px',padding:'6px 14px',fontSize:'12px',fontWeight:600,color:'var(--text-muted)'}}>
+                🏢 {user.office_name}
+              </div>
+            )}
             <button className="btn btn-teal" onClick={()=>setShowRecommend(true)}>🎯 Best Card Advisor</button>
             <button className="btn btn-ghost" onClick={loadDashboard}>↺ Refresh</button>
           </div>
         </header>
 
-        {/* ── OVERVIEW ── */}
         {activeTab==='overview'&&(
           <div className="content">
             <div className="stats-row">
               {[
-                {icon:'💳',label:'Total Credit Limit',val:fmt(dashboard?.totalLimit),sub:`${cards.length} active card${cards.length!==1?'s':''}`,c:'c-blue'},
-                {icon:'⚠️',label:'Total Outstanding',val:fmt(dashboard?.totalOutstanding),sub:'across all cards',c:'c-red'},
-                {icon:'✅',label:'Available Credit',val:fmt(dashboard?.availableCredit),sub:'ready to use',c:'c-green'},
+                {icon:'💳',label:'Total Credit Limit',val:fmtCurrency(dashboard?.totalLimit),sub:`${cards.length} active card${cards.length!==1?'s':''}`,c:'c-blue'},
+                {icon:'⚠️',label:'Total Outstanding',val:fmtCurrency(dashboard?.totalOutstanding),sub:'across all cards',c:'c-red'},
+                {icon:'✅',label:'Available Credit',val:fmtCurrency(dashboard?.availableCredit),sub:'ready to use',c:'c-green'},
                 {icon:'📊',label:'Utilization',val:`${dashboard?.utilizationRate}%`,sub:'portfolio average',c:'c-gold',bar:true},
               ].map(s=>(
                 <div key={s.label} className={`stat-card ${s.c}`}>
@@ -843,8 +1829,7 @@ export default function App() {
               </div>
               <div className="cards-scroll">
                 {cards.length===0?<div className="empty-state">No cards yet. Click "Add Card" to begin.</div>
-                  :cards.map(card=><CreditCardVisual key={card.id} card={card}
-                    onClick={()=>{setSelectedCard(card);setActiveTab('cards');}}/>)}
+                  :cards.map(card=><CreditCardVisual key={card.id} card={card} onClick={()=>{setSelectedCard(card);setActiveTab('cards');}}/>)}
               </div>
             </div>
 
@@ -857,17 +1842,10 @@ export default function App() {
                     return(
                       <div key={card.id} className="calendar-row">
                         <div className="cal-stripe" style={{background:card.color||getBankColor(card.bank_name)}}/>
-                        <div className="cal-info">
-                          <div className="cal-bank">{card.bank_name}</div>
-                          <div className="cal-num">****{card.card_number.slice(-4)}</div>
-                        </div>
+                        <div className="cal-info"><div className="cal-bank">{card.bank_name}</div><div className="cal-num">****{card.card_number.slice(-4)}</div></div>
                         <div className="cal-badges">
-                          <div className="cal-badge" style={{borderColor:urgencyColor(dDue)+'66',color:urgencyColor(dDue)}}>
-                            <span>DUE</span><strong>{dDue===0?'TODAY':`${dDue}d`}</strong>
-                          </div>
-                          <div className="cal-badge" style={{borderColor:'#4361ee44',color:'#4361ee'}}>
-                            <span>BILL</span><strong>{dBill===0?'TODAY':`${dBill}d`}</strong>
-                          </div>
+                          <div className="cal-badge" style={{borderColor:urgencyColor(dDue)+'66',color:urgencyColor(dDue)}}><span>DUE</span><strong>{dDue===0?'TODAY':`${dDue}d`}</strong></div>
+                          <div className="cal-badge" style={{borderColor:'#4361ee44',color:'#4361ee'}}><span>BILL</span><strong>{dBill===0?'TODAY':`${dBill}d`}</strong></div>
                         </div>
                         <div className="cal-amount"><InlineBalance card={card} onUpdated={loadDashboard}/></div>
                       </div>
@@ -875,21 +1853,13 @@ export default function App() {
                   })}
               </div>
               <div className="section">
-                <div className="section-header">
-                  <h3 className="section-title">📋 Recent Activity</h3>
-                  <button className="btn btn-ghost btn-sm" onClick={()=>setActiveTab('transactions')}>All →</button>
-                </div>
+                <div className="section-header"><h3 className="section-title">📋 Recent Activity</h3><button className="btn btn-ghost btn-sm" onClick={()=>setActiveTab('transactions')}>All →</button></div>
                 {(dashboard?.recentTransactions||[]).length===0?<div className="empty-state">No transactions yet.</div>
                   :(dashboard?.recentTransactions||[]).map(txn=>(
                     <div key={txn.id} className="txn-row">
                       <div className={`txn-dot ${txn.type}`}/>
-                      <div className="txn-info">
-                        <div className="txn-desc">{txn.description||txn.type}</div>
-                        <div className="txn-meta">{txn.bank_name} · {new Date(txn.transaction_date).toLocaleDateString()}</div>
-                      </div>
-                      <div className={`txn-amount ${txn.type==='payment'?'credit':'debit'}`}>
-                        {txn.type==='payment'?'−':'+'}{fmt(txn.amount)}
-                      </div>
+                      <div className="txn-info"><div className="txn-desc">{txn.description||txn.type}</div><div className="txn-meta">{txn.bank_name} · {new Date(txn.transaction_date).toLocaleDateString()}</div></div>
+                      <div className={`txn-amount ${txn.type==='payment'?'credit':'debit'}`}>{txn.type==='payment'?'−':'+'}{fmtCurrency(txn.amount)}</div>
                     </div>
                   ))}
               </div>
@@ -897,40 +1867,35 @@ export default function App() {
           </div>
         )}
 
-        {/* ── CARDS ── */}
         {activeTab==='cards'&&(
           <div className="content">
             <div className="cards-grid">
               {cards.length===0&&<div className="empty-state full-width">No cards yet. Click "Add Card" to get started.</div>}
               {cards.map(card=>(
-                <div key={card.id} className={`card-panel ${selectedCard?.id===card.id?'card-panel-active':''}`}
-                  onClick={()=>setSelectedCard(card.id===selectedCard?.id?null:card)}>
+                <div key={card.id} className={`card-panel ${selectedCard?.id===card.id?'card-panel-active':''}`} onClick={()=>setSelectedCard(card.id===selectedCard?.id?null:card)}>
                   <CreditCardVisual card={card} selected={selectedCard?.id===card.id}/>
                   <div className="card-panel-details">
                     {[
-                      {label:'Credit Limit',val:fmt(card.credit_limit)},
-                      {label:'Available',val:fmt(card.credit_limit-card.outstanding_balance),color:card.credit_limit-card.outstanding_balance>0?'#10b981':'#f43f5e'},
+                      {label:'Credit Limit',val:fmtCurrency(card.credit_limit)},
+                      {label:'Available',val:fmtCurrency(card.credit_limit-card.outstanding_balance),color:card.credit_limit-card.outstanding_balance>0?'#10b981':'#f43f5e'},
                       {label:'Billing Day',val:`${card.billing_date}th`},
                       {label:'Due Day',val:`${card.due_date}th`},
-                      {label:'SMS Alerts',val:card.sms_phone||'—'},
+                      {label:'WhatsApp',val:card.sms_phone||'—'},
+                      {label:'Email Alerts',val:card.notify_email||'—'},
                     ].map(row=>(
-                      <div key={row.label} className="cpd-row">
-                        <span>{row.label}</span>
-                        <strong style={row.color?{color:row.color}:{}}>{row.val}</strong>
-                      </div>
+                      <div key={row.label} className="cpd-row"><span>{row.label}</span><strong style={row.color?{color:row.color}:{}}>{row.val}</strong></div>
                     ))}
                     <div className="cpd-row"><span>Outstanding</span><InlineBalance card={card} onUpdated={loadDashboard}/></div>
                     <div className="cpd-utilbar">
                       <div style={{display:'flex',justifyContent:'space-between',marginBottom:'6px',fontSize:'11px',color:'var(--text-muted)'}}>
                         <span>Utilization</span><span>{Math.round((card.outstanding_balance/card.credit_limit)*100)}%</span>
                       </div>
-                      <div className="util-bar">
-                        <div className="util-fill" style={{width:`${Math.min((card.outstanding_balance/card.credit_limit)*100,100)}%`,background:urgencyColor(100-(card.outstanding_balance/card.credit_limit)*100)}}/>
-                      </div>
+                      <div className="util-bar"><div className="util-fill" style={{width:`${Math.min((card.outstanding_balance/card.credit_limit)*100,100)}%`,background:urgencyColor(100-(card.outstanding_balance/card.credit_limit)*100)}}/></div>
                     </div>
                     <div className="cpd-actions">
-                      <button className="btn btn-ghost btn-sm" onClick={e=>{e.stopPropagation();exportStatement(card,transactions);toast('Statement exported!');}}>⬇ Export</button>
+                      <button className="btn btn-ghost btn-sm" onClick={e=>{e.stopPropagation();exportStatement(card,transactions);toast('✅ Statement exported as CSV');}}>⬇ Export CSV</button>
                       <button className="btn btn-ghost btn-sm" onClick={e=>{e.stopPropagation();setEditCard(card);setShowCardModal(true);}}>✏️ Edit</button>
+                      <button className="btn btn-ghost btn-sm" onClick={e=>{e.stopPropagation();setReplacingCard(card);}}>🔄 Replace</button>
                       <button className="btn btn-danger btn-sm" onClick={e=>{e.stopPropagation();handleDeleteCard(card.id);}}>🗑</button>
                     </div>
                   </div>
@@ -940,25 +1905,19 @@ export default function App() {
           </div>
         )}
 
-        {/* ── TRANSACTIONS ── */}
         {activeTab==='transactions'&&(
           <div className="content">
             <div className="section">
-
-              {/* Row 1: Type filters + Add button */}
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'8px',flexWrap:'wrap',marginBottom:'12px'}}>
                 <div style={{display:'flex',gap:'6px',alignItems:'center',flexWrap:'wrap'}}>
                   <span style={{fontSize:'10px',fontWeight:700,textTransform:'uppercase',letterSpacing:'.6px',color:'var(--text-muted)',marginRight:'4px'}}>Type</span>
                   {['all','charge','payment','adjustment'].map(f=>(
-                    <button key={f} className={`filter-btn ${txnFilter===f?'active':''}`} onClick={()=>setTxnFilter(f)}>
-                      {f==='all'?'All Types':f.charAt(0).toUpperCase()+f.slice(1)}
-                    </button>
+                    <button key={f} className={`filter-btn ${txnFilter===f?'active':''}`} onClick={()=>setTxnFilter(f)}>{f==='all'?'All Types':f.charAt(0).toUpperCase()+f.slice(1)}</button>
                   ))}
                 </div>
                 <button className="btn btn-primary btn-sm" onClick={()=>setShowTxnModal(true)}>+ Add Transaction</button>
+                <button className="btn btn-ghost btn-sm" onClick={()=>{exportTransactions(filteredTxns, txnFilter);toast(`✅ Exported ${filteredTxns.length} transactions`);}}>⬇ Export CSV</button>
               </div>
-
-              {/* Row 2: Card + Date range filters */}
               <div style={{display:'flex',alignItems:'flex-end',gap:'12px',flexWrap:'wrap',marginBottom:'20px',paddingBottom:'16px',borderBottom:'1.5px solid var(--border)'}}>
                 <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
                   <span style={{fontSize:'10px',fontWeight:700,textTransform:'uppercase',letterSpacing:'.6px',color:'var(--text-muted)'}}>Card</span>
@@ -976,54 +1935,26 @@ export default function App() {
                   <input type="date" value={txnDateTo} min={txnDateFrom||undefined} onChange={e=>setTxnDateTo(e.target.value)} className="txn-filter-date"/>
                 </div>
                 {(txnCardFilter!=='all'||txnDateFrom||txnDateTo||txnFilter!=='all')&&(
-                  <button className="btn btn-ghost btn-sm" style={{marginBottom:'1px'}}
-                    onClick={()=>{setTxnFilter('all');setTxnCardFilter('all');setTxnDateFrom('');setTxnDateTo('');}}>
-                    ✕ Clear
-                  </button>
+                  <button className="btn btn-ghost btn-sm" style={{marginBottom:'1px'}} onClick={()=>{setTxnFilter('all');setTxnCardFilter('all');setTxnDateFrom('');setTxnDateTo('');}}>✕ Clear</button>
                 )}
-                <div style={{marginLeft:'auto',fontSize:'12px',color:'var(--text-muted)',paddingBottom:'4px'}}>
-                  {filteredTxns.length} of {transactions.length} transactions
-                </div>
+                <div style={{marginLeft:'auto',fontSize:'12px',color:'var(--text-muted)',paddingBottom:'4px'}}>{filteredTxns.length} shown · {transactions.length} of {txnTotal} loaded</div>
               </div>
-
-              {/* Table */}
               <div className="txn-table-wrap">
                 <table className="txn-table">
-                  <thead>
-                    <tr>
-                      <th>Date</th><th>Card</th><th>Description</th><th>Type</th>
-                      <th style={{textAlign:'right'}}>Amount</th>
-                      <th style={{textAlign:'center',width:'70px'}}></th>
-                    </tr>
-                  </thead>
+                  <thead><tr><th>Date</th><th>Card</th><th>Description</th><th>Type</th><th style={{textAlign:'right'}}>Amount</th><th style={{textAlign:'center',width:'70px'}}></th></tr></thead>
                   <tbody>
                     {filteredTxns.map(txn=>(
                       editingTxnId===txn.id
-                        ? <InlineTxnEdit key={txn.id} txn={txn} cards={cards}
-                            onSave={()=>{setEditingTxnId(null);loadDashboard();toast('✅ Transaction updated!');}}
-                            onCancel={()=>setEditingTxnId(null)}/>
+                        ? <InlineTxnEdit key={txn.id} txn={txn} cards={cards} onSave={()=>{setEditingTxnId(null);loadDashboard();toast('✅ Transaction updated!');}} onCancel={()=>setEditingTxnId(null)}/>
                         : <tr key={txn.id} className="txn-table-row">
                             <td>{new Date(txn.transaction_date).toLocaleDateString('en-AE')}</td>
-                            <td>
-                              <span className="bank-pill" style={{background:`${getBankColor(txn.bank_name)}15`,color:getBankColor(txn.bank_name)}}>{txn.bank_name}</span>
-                              <span style={{color:'var(--text-faint)',marginLeft:'6px',fontSize:'12px'}}>****{txn.card_number?.slice(-4)}</span>
-                            </td>
+                            <td><span className="bank-pill" style={{background:`${getBankColor(txn.bank_name)}15`,color:getBankColor(txn.bank_name)}}>{txn.bank_name}</span><span style={{color:'var(--text-faint)',marginLeft:'6px',fontSize:'12px'}}>****{txn.card_number?.slice(-4)}</span></td>
                             <td>{txn.description||'—'}</td>
                             <td><span className={`type-badge ${txn.type}`}>{txn.type}</span></td>
-                            <td style={{textAlign:'right'}}>
-                              <span className={txn.type==='payment'?'credit':'debit'}>
-                                {txn.type==='payment'?'−':'+'}{fmt(txn.amount)}
-                              </span>
-                            </td>
+                            <td style={{textAlign:'right'}}><span className={txn.type==='payment'?'credit':'debit'}>{txn.type==='payment'?'−':'+'}{fmtCurrency(txn.amount)}</span></td>
                             <td style={{textAlign:'center',whiteSpace:'nowrap'}}>
-                              <button onClick={()=>setEditingTxnId(txn.id)} title="Edit"
-                                style={{background:'none',border:'none',cursor:'pointer',fontSize:'15px',padding:'3px 4px',color:'#94a3b8',borderRadius:'6px'}}
-                                onMouseEnter={e=>e.currentTarget.style.color='#4361ee'}
-                                onMouseLeave={e=>e.currentTarget.style.color='#94a3b8'}>✏️</button>
-                              <button onClick={()=>handleDeleteTxn(txn.id)} title="Delete"
-                                style={{background:'none',border:'none',cursor:'pointer',fontSize:'15px',padding:'3px 4px',color:'#94a3b8',borderRadius:'6px'}}
-                                onMouseEnter={e=>e.currentTarget.style.color='#f43f5e'}
-                                onMouseLeave={e=>e.currentTarget.style.color='#94a3b8'}>🗑️</button>
+                              <button onClick={()=>setEditingTxnId(txn.id)} title="Edit" className="icon-btn" style={{fontSize:'15px'}}>✏️</button>
+                              <button onClick={()=>handleDeleteTxn(txn.id)} title="Delete" className="icon-btn danger" style={{fontSize:'15px'}}>🗑️</button>
                             </td>
                           </tr>
                     ))}
@@ -1031,23 +1962,26 @@ export default function App() {
                 </table>
                 {filteredTxns.length===0&&<div className="empty-state">No transactions found.</div>}
               </div>
+              {transactions.length < txnTotal && (
+                <div style={{textAlign:'center',marginTop:'16px'}}>
+                  <button className="btn btn-ghost btn-sm" onClick={loadMoreTransactions} disabled={loadingMore}>
+                    {loadingMore ? 'Loading...' : `Load ${Math.min(200, txnTotal - transactions.length)} more (${txnTotal - transactions.length} remaining)`}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {/* ── ANALYTICS ── */}
         {activeTab==='analytics'&&(
           <div className="content">
             <div className="stats-row" style={{gridTemplateColumns:'repeat(3,1fr)'}}>
               {[
-                {label:'This Month Charged',val:fmt(transactions.filter(t=>{const d=new Date(t.transaction_date),n=new Date();return t.type==='charge'&&d.getMonth()===n.getMonth()&&d.getFullYear()===n.getFullYear();}).reduce((s,t)=>s+t.amount,0))},
-                {label:'This Month Payments',val:fmt(transactions.filter(t=>{const d=new Date(t.transaction_date),n=new Date();return t.type==='payment'&&d.getMonth()===n.getMonth()&&d.getFullYear()===n.getFullYear();}).reduce((s,t)=>s+t.amount,0)),color:'var(--green)'},
+                {label:'Last 30 Days Charged',val:fmtCurrency(transactions.filter(t=>{const d=new Date(t.transaction_date),n=new Date();const days=(n-d)/86400000;return t.type==='charge'&&days>=0&&days<=30;}).reduce((s,t)=>s+Number(t.amount||0),0))},
+                {label:'Last 30 Days Payments',val:fmtCurrency(transactions.filter(t=>{const d=new Date(t.transaction_date),n=new Date();const days=(n-d)/86400000;return t.type==='payment'&&days>=0&&days<=30;}).reduce((s,t)=>s+Number(t.amount||0),0)),color:'var(--green)'},
                 {label:'Total Transactions',val:transactions.length.toString()},
               ].map(s=>(
-                <div key={s.label} className="stat-card">
-                  <div className="stat-label">{s.label}</div>
-                  <div className="stat-value" style={s.color?{color:s.color}:{}}>{s.val}</div>
-                </div>
+                <div key={s.label} className="stat-card"><div className="stat-label">{s.label}</div><div className="stat-value" style={s.color?{color:s.color}:{}}>{s.val}</div></div>
               ))}
             </div>
             <div className="two-col">
@@ -1066,7 +2000,7 @@ export default function App() {
                           <div style={{width:'10px',height:'10px',borderRadius:'50%',background:c.color||getBankColor(c.bank_name)}}/>
                           <span style={{color:'var(--text)',fontWeight:500}}>{c.bank_name}</span>
                         </div>
-                        <strong style={{color:'var(--text)'}}>{fmt(c.credit_limit)}</strong>
+                        <strong style={{color:'var(--text)'}}>{fmtCurrency(c.credit_limit)}</strong>
                       </div>
                     ))}
                   </div>
@@ -1081,11 +2015,8 @@ export default function App() {
                   return(
                     <div key={i} className="spend-row">
                       <div className="spend-rank">#{i+1}</div>
-                      <div className="spend-info">
-                        <div className="spend-desc">{s.description||'Unnamed'}</div>
-                        <div className="spend-bar-wrap"><div className="spend-bar" style={{width:`${(s.total/max)*100}%`,background:CHART_COLORS[i%CHART_COLORS.length]}}/></div>
-                      </div>
-                      <div className="spend-amount">{fmt(s.total)}</div>
+                      <div className="spend-info"><div className="spend-desc">{s.description||'Unnamed'}</div><div className="spend-bar-wrap"><div className="spend-bar" style={{width:`${(s.total/max)*100}%`,background:CHART_COLORS[i%CHART_COLORS.length]}}/></div></div>
+                      <div className="spend-amount">{fmtCurrency(s.total)}</div>
                       <div className="spend-count">{s.count}×</div>
                     </div>
                   );
@@ -1094,69 +2025,78 @@ export default function App() {
           </div>
         )}
 
-        {/* ── NOTIFICATIONS ── */}
         {activeTab==='notifications'&&(
           <div className="content">
             <div className="section">
               <div className="section-header" style={{marginBottom:'20px'}}>
                 <div>
-                  <h3 className="section-title" style={{margin:0}}>SMS Notification Log</h3>
-                  <p style={{color:'var(--text-muted)',fontSize:'13px',marginTop:'4px'}}>Fires daily at 9:00 AM · 7d, 3d, 1d before due · 3d, 1d before billing</p>
+                  <h3 className="section-title" style={{margin:0}}>Notification Log</h3>
+                  <p style={{color:'var(--text-muted)',fontSize:'13px',marginTop:'4px'}}>Fires daily at 9:00 AM · 7d, 3d, 1d before due · 3d, 1d before billing · WhatsApp and/or email, per office setting</p>
                 </div>
                 <button className="btn btn-accent" onClick={handleTriggerNotifications}>🔔 Trigger Now</button>
               </div>
-              {notifications.length===0?<div className="empty-state">No notifications yet. Add phone numbers to cards and trigger a check.</div>
+              {notifications.length===0?<div className="empty-state">No notifications yet. Add a WhatsApp number or email to a card and trigger a check.</div>
                 :notifications.map(n=>(
                   <div key={n.id} className="notif-row">
-                    <div className="notif-icon">{n.type==='due_reminder'?'⏰':'📅'}</div>
+                    <div className="notif-icon">{n.channel==='email'?'✉️':'📱'}</div>
                     <div className="notif-info">
-                      <div className="notif-title">{n.type==='due_reminder'?'Due Date Reminder':'Billing Date Reminder'}</div>
+                      <div className="notif-title">{n.type==='due_reminder'?'Due Date Reminder':'Billing Date Reminder'} · {n.channel||'whatsapp'}</div>
                       <div className="notif-card">{n.bank_name} ****{n.card_number?.slice(-4)}</div>
                     </div>
                     <div className="notif-date">{new Date(n.sent_at).toLocaleString('en-AE')}</div>
                     <div className={`notif-status ${n.status}`}>{n.status==='sent'?'✓ Sent':'✗ Failed'}</div>
+                    {n.status==='failed' && (
+                      <button className="btn btn-ghost btn-sm" onClick={()=>handleRetryNotification(n.id)}>↺ Retry</button>
+                    )}
                   </div>
                 ))}
             </div>
           </div>
         )}
+
+        {activeTab==='settings' && (
+          <SettingsPage
+            user={user}
+            offices={offices}
+            toast={toast}
+            onProfileSaved={(updatedUser) => {
+              const merged = { ...user, ...updatedUser };
+              setUser(merged);
+              localStorage.setItem('cc_user', JSON.stringify(merged));
+            }}
+          />
+        )}
       </main>
 
-      {/* ── Modals ── */}
-     
+      {showCardModal && (
+        <CardModal
+          card={editCard}
+          user={user}
+          offices={offices}
+          bankLists={bankLists}
+          defaultOfficeId={selectedOfficeId || user.office_id}
+          onClose={() => { setShowCardModal(false); setEditCard(null); }}
+          onSave={async () => { setShowCardModal(false); setEditCard(null); await loadDashboard(); toast(editCard ? '✅ Card updated!' : '✅ Card added!'); }}
+        />
+      )}
 
-{showCardModal && (
-      <CardModal
-        card={editCard}
-        onClose={() => {
-          setShowCardModal(false);
-          setEditCard(null);
-        }}
-        onSave={async () => {
-          setShowCardModal(false);
-          setEditCard(null);
-          await loadDashboard();
-          toast(editCard ? '✅ Card updated!' : '✅ Card added!');
-        }}
-      />
-    )}
+      {replacingCard && (
+        <ReplaceCardModal
+          card={replacingCard}
+          bankLists={bankLists}
+          onClose={() => setReplacingCard(null)}
+          onSave={async () => { setReplacingCard(null); await loadDashboard(); toast('✅ Card replaced — balance transferred'); }}
+        />
+      )}
 
-    {showTxnModal && (
-      <TransactionModal
-        cards={cards}
-        onClose={() => setShowTxnModal(false)}
-        onSave={async () => {
-          setShowTxnModal(false);
-          await loadDashboard();
-          toast('✅ Transaction added!');
-        }}
-      />
-    )}
+      {showTxnModal && (
+        <TransactionModal cards={cards} onClose={() => setShowTxnModal(false)}
+          onSave={async () => { setShowTxnModal(false); await loadDashboard(); toast('✅ Transaction added!'); }}/>
+      )}
 
-    {showRecommend && (
-      <RecommendModal onClose={() => setShowRecommend(false)} />
-    )}
-
-  </div>
-);
+      {showRecommend && (
+        <RecommendModal onClose={() => setShowRecommend(false)} officeParam={officeParam} />
+      )}
+    </div>
+  );
 }
